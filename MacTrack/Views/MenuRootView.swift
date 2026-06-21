@@ -1,0 +1,142 @@
+import SwiftUI
+
+/// The menu-bar popover — the whole app. A clean vertical rhythm: header, hero
+/// total, then the ranked Apps / Websites list. Monochrome with one gold accent
+/// for the live state. Sections are separated by hairlines, not noise.
+struct MenuRootView: View {
+    @EnvironmentObject var store: UsageStore
+    @EnvironmentObject var monitor: ActivityMonitor
+
+    @State private var scope: UsageScope = {
+        switch ProcessInfo.processInfo.environment["MACTRACK_SCOPE"] {
+        case "websites": return .websites
+        case "all": return .all
+        default: return .apps
+        }
+    }()
+    @State private var showSettings = false
+    @AppStorage("idleThreshold") private var idleThreshold: Double = 120
+    @AppStorage("chartStartHour") private var chartStartHour: Int = 8
+    @AppStorage("chartEndHour") private var chartEndHour: Int = 22
+
+    private var appEntries: [UsageEntry] { store.appEntries(for: DayKey.today) }
+    private var siteEntries: [UsageEntry] { store.siteEntries(for: DayKey.today) }
+    private var entries: [UsageEntry] {
+        switch scope {
+        case .apps: return appEntries
+        // Websites list hides sub-minute visits (still counted toward the app's total).
+        case .websites: return store.siteEntries(for: DayKey.today, minSeconds: 60)
+        case .all: return store.allEntries(for: DayKey.today)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HeaderView(showSettings: $showSettings)
+
+            if showSettings {
+                divider.padding(.top, 16).padding(.bottom, 14)
+                SettingsView()
+                    .frame(minHeight: 280)
+                    .transition(.opacity)
+            } else {
+                divider.padding(.top, 16).padding(.bottom, 14)
+                HStack(spacing: 8) {
+                    SegmentedToggle(selection: $scope)
+                    AllButton(selection: $scope)
+                }
+
+                listHeader
+                    .padding(.top, 14)
+                    .padding(.bottom, 4)
+
+                VStack(spacing: 2) {
+                    if scope == .websites && monitor.automationDenied {
+                        PermissionNudge { Permissions.openAutomationSettings() }
+                            .padding(.bottom, 6)
+                    }
+                    if entries.isEmpty {
+                        EmptyStateView(scope: scope)
+                    } else {
+                        UsageListView(entries: entries)
+                    }
+                }
+                .id(scope)
+                .transition(.opacity)
+                .animation(.calm, value: scope)
+
+                if !entries.isEmpty {
+                    insetDivider.padding(.top, 14).padding(.bottom, 12)
+                    UsageChartView(
+                        lines: store.chartLines(entries: entries,
+                                                startMinute: chartStartHour * 60,
+                                                endMinute: chartEndHour * 60),
+                        startMinute: chartStartHour * 60,
+                        endMinute: chartEndHour * 60
+                    )
+                    .id(scope)
+                    .transition(.opacity)
+                }
+
+                divider.padding(.top, 12).padding(.bottom, 11)
+                footer
+            }
+        }
+        .padding(18)
+        .frame(width: 340)
+        .background(GlassPanelBackground())
+        .background(WindowAccessor())
+        .onAppear { monitor.setIdleThreshold(idleThreshold) }
+    }
+
+    private var divider: some View {
+        Rectangle().fill(Theme.hairline).frame(height: 0.5)
+    }
+
+    /// A shorter, centered hairline between the list and the chart — deliberately
+    /// inset so it doesn't run to the panel edges.
+    private var insetDivider: some View {
+        Rectangle().fill(Theme.hairline).frame(height: 0.5).padding(.horizontal, 14)
+    }
+
+    private var listHeader: some View {
+        HStack {
+            SectionLabel(text: scope == .apps ? "Application" : scope == .websites ? "Website" : "Activity")
+            Spacer()
+            SectionLabel(text: "Focused")
+        }
+    }
+
+    private var footer: some View {
+        HStack(spacing: 6) {
+            Text("\(appEntries.count) apps")
+            Text("·").foregroundStyle(Theme.Ink.faint)
+            Text("\(siteEntries.count) sites")
+            Spacer()
+            Button { NSApp.terminate(nil) } label: {
+                Text("Quit")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.Ink.tertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(Theme.Ink.tertiary)
+    }
+}
+
+/// Makes the popover's host window clear so the rounded glass panel reads as a
+/// floating slab instead of sitting on an opaque rectangle.
+private struct WindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async {
+            guard let window = v.window else { return }
+            window.backgroundColor = .clear
+            window.isOpaque = false
+            window.hasShadow = true
+        }
+        return v
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
