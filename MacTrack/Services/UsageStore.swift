@@ -17,6 +17,8 @@ final class UsageStore: ObservableObject {
     /// Today's per-minute samples, keyed "kind:key" → (minute → seconds). Drives
     /// the line chart. Persisted via the database; cached here for fast reads.
     private(set) var todaySamples: [String: [Int: Double]] = [:]
+    /// The calendar day `todaySamples` belongs to — reset when the day rolls over.
+    private var samplesDay: String = DayKey.today
 
     /// Bumped on every attribution so dependent views recompute live.
     @Published private(set) var revision: Int = 0
@@ -89,10 +91,15 @@ final class UsageStore: ObservableObject {
     }
 
     private func recordSample(kind: String, key: String, seconds: Double) {
+        let today = DayKey.today
+        if today != samplesDay {          // crossed midnight while running — start a fresh chart day
+            todaySamples = [:]
+            samplesDay = today
+        }
         let minute = DayKey.minuteOfDay
         let id = kind + ":" + key
         todaySamples[id, default: [:]][minute, default: 0] += seconds
-        db?.addSample(day: DayKey.today, kind: kind, key: key, minute: minute, addSeconds: seconds)
+        db?.addSample(day: today, kind: kind, key: key, minute: minute, addSeconds: seconds)
     }
 
     // MARK: Exclusions ("Don't track")
@@ -137,10 +144,12 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    func siteEntries(for dayKey: String, minSeconds: Double = 0) -> [UsageEntry] {
+    func siteEntries(for dayKey: String, minSeconds: Double = 0, alwaysInclude: String? = nil) -> [UsageEntry] {
         guard let day = days[dayKey] else { return [] }
+        // The site you're currently on always shows, even under the minute floor,
+        // so the list immediately reflects what you're looking at.
         let sorted = day.sites.values
-            .filter { !excludedSites.contains($0.domain) && $0.seconds >= minSeconds }
+            .filter { !excludedSites.contains($0.domain) && ($0.seconds >= minSeconds || $0.domain == alwaysInclude) }
             .sorted { $0.seconds > $1.seconds }
         let maxSeconds = sorted.first?.seconds ?? 1
         return sorted.map { stat in
@@ -160,12 +169,14 @@ final class UsageStore: ObservableObject {
     /// Browser apps (Safari, Chrome, …) are omitted on purpose: their total is
     /// just the sum of their tabs, so the individual sites represent that time —
     /// showing "Safari" as a lump would double-represent it and bury the sites.
-    func allEntries(for dayKey: String) -> [UsageEntry] {
+    func allEntries(for dayKey: String, currentDomain: String? = nil) -> [UsageEntry] {
         let nonBrowserApps = appEntries(for: dayKey).filter { entry in
             if case .app(let bundleID) = entry.kind { return !BrowserURLReader.isBrowser(bundleID) }
             return true
         }
-        var combined = (nonBrowserApps + siteEntries(for: dayKey))
+        // Same 1-minute floor for sites as the Websites tab (plus the active site),
+        // so a short site can't appear in All while being hidden from Websites.
+        var combined = (nonBrowserApps + siteEntries(for: dayKey, minSeconds: 60, alwaysInclude: currentDomain))
             .sorted { $0.seconds > $1.seconds }
         let maxSeconds = combined.first?.seconds ?? 1
         for i in combined.indices {

@@ -24,9 +24,9 @@ struct MenuRootView: View {
     private var entries: [UsageEntry] {
         switch scope {
         case .apps: return appEntries
-        // Websites list hides sub-minute visits (still counted toward the app's total).
-        case .websites: return store.siteEntries(for: DayKey.today, minSeconds: 60)
-        case .all: return store.allEntries(for: DayKey.today)
+        // Websites hides sub-minute visits, but always shows the site you're on now.
+        case .websites: return store.siteEntries(for: DayKey.today, minSeconds: 60, alwaysInclude: monitor.currentDomain)
+        case .all: return store.allEntries(for: DayKey.today, currentDomain: monitor.currentDomain)
         }
     }
 
