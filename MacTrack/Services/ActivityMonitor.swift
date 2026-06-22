@@ -19,6 +19,7 @@ final class ActivityMonitor: ObservableObject {
     @Published private(set) var isPresent = true       // idle/lock state
 
     private let store: UsageStore
+    private let blocks: BlockController
     private let idle = IdleDetector()
     private let browserReader = BrowserURLReader()
 
@@ -31,11 +32,22 @@ final class ActivityMonitor: ObservableObject {
     private var lastTab: [String: BrowserURLReader.TabInfo] = [:]
     private var pendingFetch: Set<String> = []
 
+    /// Auto-resume: after pausing, the first real mouse movement resumes tracking
+    /// so a pause can never be forgotten. A short grace ignores the click that
+    /// started the pause; after that, any movement counts.
+    private var pausedAt: Date?
+    private var pausedMouseLoc: NSPoint = .zero
+    private var mouseMonitor: Any?
+    private let autoResumeGrace: TimeInterval = 1.0
+
     var automationDenied: Bool { browserReader.automationDenied }
 
-    init(store: UsageStore) {
+    init(store: UsageStore, blocks: BlockController) {
         self.store = store
+        self.blocks = blocks
     }
+
+    deinit { if let m = mouseMonitor { NSEvent.removeMonitor(m) } }
 
     func start() {
         guard timer == nil else { return }
@@ -53,8 +65,44 @@ final class ActivityMonitor: ObservableObject {
     }
 
     func setPaused(_ paused: Bool) {
+        guard paused != isPaused else { return }
         isPaused = paused
-        lastTick = Date()  // don't backfill the paused gap
+        lastTick = Date()      // don't backfill the paused gap
+        if paused {
+            pausedAt = Date()
+            pausedMouseLoc = NSEvent.mouseLocation
+            startMouseMonitor()
+        } else {
+            pausedAt = nil
+            stopMouseMonitor()
+        }
+    }
+
+    // MARK: - Auto-resume on return
+
+    /// Instant path: a real mouse/scroll event anywhere resumes immediately. The
+    /// tick's position check is the reliable fallback if this monitor doesn't fire.
+    private func startMouseMonitor() {
+        stopMouseMonitor()
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged,
+                       .scrollWheel, .leftMouseDown, .rightMouseDown]
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.autoResume() }
+        }
+    }
+
+    private func stopMouseMonitor() {
+        if let m = mouseMonitor { NSEvent.removeMonitor(m); mouseMonitor = nil }
+    }
+
+    /// Resume once we're past the grace window (so the pause click itself, and any
+    /// settle right after, don't immediately unpause).
+    private func autoResume() {
+        guard isPaused, let pausedAt, Date().timeIntervalSince(pausedAt) >= autoResumeGrace else { return }
+        let loc = NSEvent.mouseLocation
+        guard hypot(loc.x - pausedMouseLoc.x, loc.y - pausedMouseLoc.y) > 6 else { return }
+        setPaused(false)
     }
 
     func setIdleThreshold(_ seconds: TimeInterval) {
@@ -71,8 +119,26 @@ final class ActivityMonitor: ObservableObject {
         let present = idle.isPresent
         isPresent = present
 
-        // Drop unreasonable gaps (sleep/wake, debugger pauses) and idle/paused time.
-        guard !isPaused, present, delta > 0, delta < interval * 4 else {
+        // Blocking runs regardless of pause/idle — a block is a block.
+        blocks.tick()
+        enforceBlocks()
+
+        if isPaused {
+            // Reliable fallback (no event monitor needed): if the cursor has moved
+            // from where it was when paused, resume — once past the grace window.
+            if let pausedAt, now.timeIntervalSince(pausedAt) >= autoResumeGrace {
+                let loc = NSEvent.mouseLocation
+                if hypot(loc.x - pausedMouseLoc.x, loc.y - pausedMouseLoc.y) > 6 {
+                    setPaused(false)
+                    return
+                }
+            }
+            refreshLiveLabelsOnly()
+            return
+        }
+
+        // Drop unreasonable gaps (sleep/wake, debugger pauses) and idle time.
+        guard present, delta > 0, delta < interval * 4 else {
             refreshLiveLabelsOnly()
             return
         }
@@ -109,6 +175,24 @@ final class ActivityMonitor: ObservableObject {
     }
 
     /// Keep the "now tracking" line truthful even while idle/paused.
+    /// Hide a blocked app or bounce a blocked website's tab. Runs every tick.
+    private func enforceBlocks() {
+        guard let front = NSWorkspace.shared.frontmostApplication,
+              let bundleID = front.bundleIdentifier else { return }
+        if blocks.isAppBlocked(bundleID) {
+            front.hide()
+            return
+        }
+        if BrowserURLReader.isBrowser(bundleID) {
+            if let tab = lastTab[bundleID],
+               let domain = DomainReducer.registrableDomain(from: tab.url),
+               blocks.isSiteBlocked(domain) {
+                browserReader.blockActiveTab(bundleID: bundleID)
+            }
+            refreshBrowserTab(bundleID: bundleID)   // keep the tab fresh to catch navigation
+        }
+    }
+
     private func refreshLiveLabelsOnly() {
         guard let front = NSWorkspace.shared.frontmostApplication,
               let bundleID = front.bundleIdentifier,
