@@ -195,6 +195,37 @@ final class UsageStore: ObservableObject {
         return (p, u, o)
     }
 
+    /// The apps/sites that make up one productivity bucket — `tag == nil` means
+    /// Other (untagged) — sorted by time, with a within-bucket fraction for the row
+    /// wash. Browsers are skipped (their time is represented by their sites).
+    func productivityItems(tag: ProductivityTag?, for dayKey: String) -> [UsageEntry] {
+        guard let day = days[dayKey] else { return [] }
+        var items: [UsageEntry] = []
+        for stat in day.apps.values
+        where !excludedApps.contains(stat.bundleID)
+            && !SystemApps.isBlocked(stat.bundleID)
+            && !BrowserURLReader.isBrowser(stat.bundleID)
+            && appTags[stat.bundleID] == tag {
+            items.append(UsageEntry(
+                id: "app:" + stat.bundleID, kind: .app(bundleID: stat.bundleID),
+                title: stat.name, subtitle: nil, seconds: stat.seconds,
+                category: ActivityCategory.classify(bundleID: stat.bundleID), fraction: 0))
+        }
+        for stat in day.sites.values
+        where !excludedSites.contains(stat.domain) && siteTags[stat.domain] == tag {
+            items.append(UsageEntry(
+                id: "site:" + stat.domain, kind: .site(domain: stat.domain),
+                title: stat.domain, subtitle: nil, seconds: stat.seconds,
+                category: .web, fraction: 0))
+        }
+        let maxSeconds = items.map(\.seconds).max() ?? 1
+        return items.sorted { $0.seconds > $1.seconds }.map { e in
+            var x = e
+            x.fraction = maxSeconds > 0 ? e.seconds / maxSeconds : 0
+            return x
+        }
+    }
+
     // MARK: Derived rows
 
     func appEntries(for dayKey: String) -> [UsageEntry] {

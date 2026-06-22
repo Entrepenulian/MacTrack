@@ -11,6 +11,8 @@ struct ProductivityDonut: View {
 
     @State private var hoveredSlice: Int? = nil
     @State private var cursorActive = false
+    @State private var selected: Int? = nil          // tapped slice → its breakdown
+    @EnvironmentObject private var store: UsageStore
 
     private var total: Double { productive + unproductive + other }
 
@@ -30,27 +32,42 @@ struct ProductivityDonut: View {
     private let gap: Double = 0.05   // gap between rounded segments (activity-ring look)
 
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             ring
                 .frame(width: 156, height: 156)
                 .frame(width: 184, height: 184)        // larger, centered hit area
                 .contentShape(Rectangle())
                 .onContinuousHover(coordinateSpace: .local) { handleHover($0) }
+                .onTapGesture { tapRing() }
                 .onDisappear { if cursorActive { NSCursor.pop(); cursorActive = false } }
                 .padding(.top, 2)
-            legend
-            if !hasTags {
-                Text("Right-click any app or site to tag it productive or unproductive.")
-                    .font(.rowMeta)
-                    .foregroundStyle(Theme.Ink.tertiary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 2)
+
+            // Tap a slice to drill into its apps/sites; tap again (or the back
+            // chevron) to return to the legend.
+            ZStack {
+                if let sel = selected {
+                    detail(for: sel).transition(.opacity)
+                } else {
+                    VStack(spacing: 12) {
+                        legend
+                        if !hasTags { hint }
+                    }
+                    .transition(.opacity)
+                }
             }
+            .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.3), value: selected)
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 4)
+    }
+
+    private var hint: some View {
+        Text("Right-click any app or site to tag it productive or unproductive.")
+            .font(.rowMeta)
+            .foregroundStyle(Theme.Ink.tertiary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 16)
     }
 
     private var ring: some View {
@@ -84,11 +101,11 @@ struct ProductivityDonut: View {
         }
         return ZStack {
             ForEach(Array(arcs.enumerated()), id: \.offset) { _, arc in
-                let hot = hoveredSlice == arc.index
+                let hot = hoveredSlice == arc.index || selected == arc.index
                 Circle()
                     .trim(from: arc.from, to: arc.to)
                     .stroke(arc.color, style: StrokeStyle(lineWidth: hot ? hoverWidth : lineWidth, lineCap: .round))
-                    // Slices are thin by default; the hovered one grows and glows more.
+                    // Slices are thin by default; the hovered/selected one grows and glows.
                     .shadow(color: arc.color.opacity(hot ? 0.55 : 0.36), radius: hot ? 5 : 3)
                     .shadow(color: arc.color.opacity(hot ? 0.34 : 0.18), radius: hot ? 14 : 8)
                     .rotationEffect(.degrees(-90))
@@ -96,6 +113,7 @@ struct ProductivityDonut: View {
         }
         .animation(.calm, value: total)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: hoveredSlice)
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: selected)
     }
 
     private func handleHover(_ phase: HoverPhase) {
@@ -138,6 +156,7 @@ struct ProductivityDonut: View {
     /// section with the highest percentage.
     private var shownIndex: Int {
         if let h = hoveredSlice { return h }
+        if let s = selected { return s }
         let p = pct
         return p.indices.max(by: { p[$0] < p[$1] }) ?? 0
     }
@@ -185,6 +204,100 @@ struct ProductivityDonut: View {
             }
         }
         .padding(.horizontal, 4)
+    }
+
+    // MARK: Tap-to-drill-down
+
+    private func tapRing() {
+        if let h = hoveredSlice {
+            selected = (selected == h) ? nil : h
+        } else {
+            selected = nil
+        }
+    }
+
+    private func tagFor(_ index: Int) -> ProductivityTag? {
+        switch index {
+        case 0: return .productive
+        case 1: return .unproductive
+        default: return nil          // Other = untagged
+        }
+    }
+
+    /// The breakdown for one category: a header (back · dot · name · total) and the
+    /// apps/sites that make it up, each with its share wash and time.
+    private func detail(for index: Int) -> some View {
+        let r = rows[index]
+        let items = store.productivityItems(tag: tagFor(index), for: DayKey.today)
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Button {
+                    withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.3)) { selected = nil }
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.Ink.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(r.color).frame(width: 9, height: 9)
+                Text(r.name).font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                Spacer()
+                Text("\(total > 0 ? pct[index] : 0)%")
+                    .font(.rowMeta.monospacedDigit()).foregroundStyle(Theme.Ink.tertiary)
+                Text(Format.duration(r.value))
+                    .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.Ink.primary)
+            }
+            .padding(.bottom, 9)
+
+            Rectangle().fill(Theme.hairline).frame(height: 0.5)
+
+            if items.isEmpty {
+                Text("Nothing tagged \(r.name.lowercased()) yet.")
+                    .font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
+                    .frame(maxWidth: .infinity).padding(.vertical, 18)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(items.prefix(7)) { breakdownRow($0, color: r.color) }
+                    if items.count > 7 {
+                        Text("+\(items.count - 7) more")
+                            .font(.rowMeta).foregroundStyle(Theme.Ink.faint)
+                            .frame(maxWidth: .infinity).padding(.top, 5)
+                    }
+                }
+                .padding(.top, 7)
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func breakdownRow(_ entry: UsageEntry, color: Color) -> some View {
+        HStack(spacing: 10) {
+            icon(for: entry).frame(width: 20, height: 20)
+            Text(entry.title)
+                .font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 8)
+            Text(Format.duration(entry.seconds))
+                .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.Ink.secondary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 34)
+        .background(alignment: .leading) {
+            GeometryReader { geo in
+                RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                    .fill(color.opacity(0.16))
+                    .frame(width: max(geo.size.width * CGFloat(entry.fraction), Theme.Radius.row * 2))
+            }
+        }
+    }
+
+    @ViewBuilder private func icon(for entry: UsageEntry) -> some View {
+        switch entry.kind {
+        case .app(let bundleID): AppIconView(bundleID: bundleID, size: 20)
+        case .site(let domain): FaviconView(domain: domain, size: 20)
+        }
     }
 
     /// Largest-remainder apportionment to 100, with a 1% floor for any non-zero
