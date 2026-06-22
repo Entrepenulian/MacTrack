@@ -258,7 +258,7 @@ struct ProductivityDonut: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             } else {
                 VStack(spacing: 2) {
-                    ForEach(items.prefix(7)) { breakdownRow($0, color: r.color) }
+                    ForEach(items.prefix(7)) { BreakdownRow(entry: $0, color: r.color) }
                     if items.count > 7 {
                         Text("+\(items.count - 7) more")
                             .font(.rowMeta).foregroundStyle(Theme.Ink.faint)
@@ -269,34 +269,6 @@ struct ProductivityDonut: View {
             }
         }
         .padding(.horizontal, 4)
-    }
-
-    private func breakdownRow(_ entry: UsageEntry, color: Color) -> some View {
-        HStack(spacing: 10) {
-            icon(for: entry).frame(width: 20, height: 20)
-            Text(entry.title)
-                .font(.rowTitle).foregroundStyle(Theme.Ink.primary)
-                .lineLimit(1).truncationMode(.middle)
-            Spacer(minLength: 8)
-            Text(Format.duration(entry.seconds))
-                .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.Ink.secondary)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 34)
-        .background(alignment: .leading) {
-            GeometryReader { geo in
-                RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
-                    .fill(color.opacity(0.16))
-                    .frame(width: max(geo.size.width * CGFloat(entry.fraction), Theme.Radius.row * 2))
-            }
-        }
-    }
-
-    @ViewBuilder private func icon(for entry: UsageEntry) -> some View {
-        switch entry.kind {
-        case .app(let bundleID): AppIconView(bundleID: bundleID, size: 20)
-        case .site(let domain): FaviconView(domain: domain, size: 20)
-        }
     }
 
     /// Largest-remainder apportionment to 100, with a 1% floor for any non-zero
@@ -325,5 +297,47 @@ struct ProductivityDonut: View {
             }
         }
         return pct
+    }
+}
+
+/// One row in a productivity breakdown: icon · name · time, with a share wash in
+/// the category color and a subtle full-row highlight on hover.
+private struct BreakdownRow: View {
+    let entry: UsageEntry
+    let color: Color
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            icon.frame(width: 20, height: 20)
+            Text(entry.title)
+                .font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 8)
+            Text(Format.duration(entry.seconds))
+                .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.Ink.secondary)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 34)
+        .background(alignment: .leading) {
+            ZStack(alignment: .leading) {
+                GeometryReader { geo in
+                    RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                        .fill(color.opacity(0.16))
+                        .frame(width: max(geo.size.width * CGFloat(entry.fraction), Theme.Radius.row * 2))
+                }
+                RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                    .fill(Color.primary.opacity(hovering ? 0.08 : 0))
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
+        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+    }
+
+    @ViewBuilder private var icon: some View {
+        switch entry.kind {
+        case .app(let bundleID): AppIconView(bundleID: bundleID, size: 20)
+        case .site(let domain): FaviconView(domain: domain, size: 20)
+        }
     }
 }
