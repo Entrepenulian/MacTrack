@@ -1,6 +1,6 @@
 # MacTrack
 
-A free, native macOS menu bar app that shows where your time actually goes: which **apps** you focus on, and which **websites** you spend it on. No account, no subscription, no cloud. It lives in your menu bar, stays out of the way, and keeps every byte of data on your Mac.
+A free, native macOS menu bar app that shows where your time actually goes: which **apps** you focus on, which **websites** you spend it on, and **how productive** that time is. It can also **block** distracting apps and sites on a locked timer, and **pause overnight**. No account, no subscription, no cloud. It lives in your menu bar, stays out of the way, and keeps every byte of data on your Mac.
 
 Most time trackers are heavy, paid, and want your data. MacTrack is the opposite: one small menu bar app, a clean read on your day, and a database that never leaves your machine.
 
@@ -19,6 +19,9 @@ Most time trackers are heavy, paid, and want your data. MacTrack is the opposite
 - **A clean daily line chart.** The top items plotted across your day, with a hover scrubber for exact values. Set the chart's start and end hours in settings.
 - **Glanceable totals.** The menu bar shows live time for whatever you are on right now. Open the popover for the full breakdown.
 - **Right-click to ignore.** Don't want something tracked? Right-click any row and choose "Don't track." It disappears and stays gone.
+- **A productivity score.** Tag any app or site as productive or unproductive (right-click → **Productivity**). MacTrack rolls your day into a Productive / Unproductive / Other donut so you see your focus at a glance; anything untagged counts as Other.
+- **Block distractions.** Right-click anything and block it for 15 minutes to 2 hours. While a block is live there is no off switch — a locked countdown, plus app-hiding and tab-bouncing, keeps you out until it expires. An optional **system-level filter** (a signed Network Extension) makes it DoH-proof and keeps working even if you quit MacTrack — see [SETUP_BLOCKING.md](SETUP_BLOCKING.md).
+- **Good-night mode.** One tap stops tracking for the night and auto-resumes at the wake time you set, so late-night idle never skews your day.
 
 ## Privacy
 
