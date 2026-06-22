@@ -3,6 +3,8 @@ import SwiftUI
 /// The ranked list for the active scope. Shows up to `maxItems` entries (10 by
 /// default) with a calm stagger on first appearance — no collapsing, no clip.
 struct UsageListView: View {
+    @EnvironmentObject var store: UsageStore
+    @EnvironmentObject var blocks: BlockController
     let entries: [UsageEntry]
     var maxItems: Int = 10
 
@@ -13,13 +15,43 @@ struct UsageListView: View {
     var body: some View {
         VStack(spacing: 2) {
             ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
-                UsageRow(entry: entry)
+                UsageRow(entry: entry,
+                         currentTag: currentTag(entry),
+                         onBlock: { startBlock(entry, $0) },
+                         onTag: { applyTag(entry, $0) },
+                         onExclude: { dontTrack(entry) })
+                    .equatable()
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 6)
                     .animation(.calm.delay(Double(min(index, 9)) * 0.022), value: appeared)
             }
         }
         .onAppear { appeared = true }
+    }
+
+    private func currentTag(_ entry: UsageEntry) -> ProductivityTag? {
+        switch entry.kind {
+        case .app(let bundleID): return store.appTag(bundleID)
+        case .site(let domain): return store.siteTag(domain)
+        }
+    }
+    private func startBlock(_ entry: UsageEntry, _ minutes: Int) {
+        switch entry.kind {
+        case .app(let bundleID): blocks.block(kind: "app", value: bundleID, minutes: minutes)
+        case .site(let domain): blocks.block(kind: "site", value: domain, minutes: minutes)
+        }
+    }
+    private func applyTag(_ entry: UsageEntry, _ tag: ProductivityTag?) {
+        switch entry.kind {
+        case .app(let bundleID): store.setAppTag(bundleID, tag)
+        case .site(let domain): store.setSiteTag(domain, tag)
+        }
+    }
+    private func dontTrack(_ entry: UsageEntry) {
+        switch entry.kind {
+        case .app(let bundleID): store.excludeApp(bundleID)
+        case .site(let domain): store.excludeSite(domain)
+        }
     }
 }
 
