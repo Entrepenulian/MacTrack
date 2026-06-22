@@ -237,8 +237,11 @@ private struct PremiumSlider: View {
             let w = geo.size.width
             let span = range.upperBound - range.lowerBound
             let frac = span > 0 ? min(max((value - range.lowerBound) / span, 0), 1) : 0
-            let travel = w - knobW
-            let knobX = frac * travel                       // knob leading-edge offset
+            // The knob keeps the same margin from the left/right ends as it has from
+            // the top/bottom, so at the extremes it's never flush against the edge.
+            let inset = (trackHeight - knobH) / 2
+            let travel = w - knobW - inset * 2
+            let knobX = inset + frac * travel               // knob leading-edge offset
 
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.fill(2))               // neutral (unfilled) track
@@ -246,7 +249,7 @@ private struct PremiumSlider: View {
                     .frame(width: min(w, knobX + knobW))
                 // Tick dots sit exactly on the snap positions (where the knob lands).
                 ForEach(0..<dotCount, id: \.self) { i in
-                    let cx = knobW / 2 + (Double(i) / Double(dotCount - 1)) * travel
+                    let cx = inset + knobW / 2 + (Double(i) / Double(dotCount - 1)) * travel
                     Circle().fill(Color.white.opacity(0.33)).frame(width: 3, height: 3)
                         .position(x: cx, y: trackHeight / 2)
                 }
@@ -261,7 +264,7 @@ private struct PremiumSlider: View {
             .animation(.snappy(duration: 0.14), value: value)   // crisp snap between dots
             .gesture(
                 DragGesture(minimumDistance: 0).onChanged { g in
-                    let f = min(max((g.location.x - knobW / 2) / travel, 0), 1)
+                    let f = min(max((g.location.x - inset - knobW / 2) / travel, 0), 1)
                     let raw = range.lowerBound + f * span
                     let stepped = step > 0 ? (raw / step).rounded() * step : raw
                     value = min(max(stepped, range.lowerBound), range.upperBound)
