@@ -40,11 +40,22 @@ final class ActivityMonitor: ObservableObject {
     private var mouseMonitor: Any?
     private let autoResumeGrace: TimeInterval = 1.0
 
+    /// "Good night" mode: tracking is off until a chosen morning hour. Survives
+    /// relaunch (persisted) and resumes on its own at the wake time.
+    @Published private(set) var isSleeping = false
+    private var sleepUntilDate: Date?
+    private let sleepKey = "mactrack.sleepUntil"
+
     var automationDenied: Bool { browserReader.automationDenied }
 
     init(store: UsageStore, blocks: BlockController) {
         self.store = store
         self.blocks = blocks
+        if let ts = UserDefaults.standard.object(forKey: sleepKey) as? Double {
+            let until = Date(timeIntervalSince1970: ts)
+            if until > Date() { sleepUntilDate = until; isSleeping = true }
+            else { UserDefaults.standard.removeObject(forKey: sleepKey) }
+        }
     }
 
     deinit { if let m = mouseMonitor { NSEvent.removeMonitor(m) } }
@@ -105,6 +116,35 @@ final class ActivityMonitor: ObservableObject {
         setPaused(false)
     }
 
+    // MARK: - Sleep ("good night") mode
+
+    /// Toggle: tap once to stop tracking for the night; tap again to wake now.
+    func sleepForNight(wakeHour: Int) {
+        if isSleeping { wake(); return }
+        let until = Self.nextOccurrence(hour: wakeHour)
+        sleepUntilDate = until
+        UserDefaults.standard.set(until.timeIntervalSince1970, forKey: sleepKey)
+        isSleeping = true
+        lastTick = Date()
+    }
+
+    func wake() {
+        sleepUntilDate = nil
+        UserDefaults.standard.removeObject(forKey: sleepKey)
+        isSleeping = false
+        lastTick = Date()
+    }
+
+    private static func nextOccurrence(hour: Int) -> Date {
+        let cal = Calendar.current
+        let now = Date()
+        var comps = cal.dateComponents([.year, .month, .day], from: now)
+        comps.hour = hour; comps.minute = 0; comps.second = 0
+        var date = cal.date(from: comps) ?? now
+        if date <= now { date = cal.date(byAdding: .day, value: 1, to: date) ?? date }
+        return date
+    }
+
     func setIdleThreshold(_ seconds: TimeInterval) {
         idle.idleThreshold = seconds
     }
@@ -122,6 +162,14 @@ final class ActivityMonitor: ObservableObject {
         // Blocking runs regardless of pause/idle — a block is a block.
         blocks.tick()
         enforceBlocks()
+
+        if isSleeping {
+            if let until = sleepUntilDate, now < until {
+                refreshLiveLabelsOnly()
+                return
+            }
+            wake()   // reached the wake hour — resume tracking
+        }
 
         if isPaused {
             // Reliable fallback (no event monitor needed): if the cursor has moved
