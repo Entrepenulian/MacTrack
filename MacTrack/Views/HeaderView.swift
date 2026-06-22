@@ -49,11 +49,6 @@ struct HeaderView: View {
                                 help: showOverview ? "Show details" : "Show productivity") {
                     showOverview.toggle()
                 }
-                GlassIconButton(systemName: monitor.isSleeping ? "moon.fill" : "moon",
-                                size: 26,
-                                help: monitor.isSleeping ? "Wake now" : "Stop for the night — resumes at \(hourLabel(wakeHour))") {
-                    monitor.sleepForNight(wakeHour: wakeHour)
-                }
                 GlassIconButton(systemName: monitor.isPaused ? "play.fill" : "pause.fill",
                                 size: 26,
                                 help: monitor.isPaused ? "Resume tracking" : "Pause tracking") {

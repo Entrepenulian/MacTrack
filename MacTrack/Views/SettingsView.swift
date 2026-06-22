@@ -39,6 +39,22 @@ struct SettingsView: View {
                             .onChange(of: idleThreshold) { _, v in monitor.setIdleThreshold(v) }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 11)
+                }
+            }
+
+            section("Sleep") {
+                card {
+                    row {
+                        labelBlock(
+                            monitor.isSleeping ? "Asleep until \(hourLabel(wakeHour))" : "Good night",
+                            monitor.isSleeping ? "Tracking is off for the night" : "Stop tracking until your wake time"
+                        )
+                        Spacer(minLength: Theme.Space.sm)
+                        Button(monitor.isSleeping ? "Wake now" : "Sleep") {
+                            monitor.sleepForNight(wakeHour: wakeHour)
+                        }
+                        .buttonStyle(.plain).font(.rowValue).foregroundStyle(Theme.settingsAccent)
+                    }
                     rowDivider
                     stepperRow("Wake time", value: $wakeHour, range: 0...23)
                 }
