@@ -33,9 +33,11 @@ struct ProductivityDonut: View {
         VStack(spacing: 18) {
             ring
                 .frame(width: 156, height: 156)
+                .frame(width: 184, height: 184)        // larger, centered hit area
+                .contentShape(Rectangle())
                 .onContinuousHover(coordinateSpace: .local) { handleHover($0) }
                 .onDisappear { if cursorActive { NSCursor.pop(); cursorActive = false } }
-                .padding(.top, 6)
+                .padding(.top, 2)
             legend
             if !hasTags {
                 Text("Right-click any app or site to tag it productive or unproductive.")
@@ -113,10 +115,12 @@ struct ProductivityDonut: View {
     /// distance from the center. Returns nil for the hole, the center, or outside.
     private func sliceIndex(at p: CGPoint) -> Int? {
         guard total > 0 else { return nil }
-        let c = 78.0
+        let c = 92.0   // center of the 184×184 hit frame
         let dx = Double(p.x) - c, dy = Double(p.y) - c
         let r = (dx * dx + dy * dy).squareRoot()
-        guard r >= 62, r <= 92 else { return nil }       // within the ring band
+        // Generous band around the ring (path radius ~78) so you don't have to land
+        // exactly on the stroke — forgiving ~17px inward and ~10px outward.
+        guard r >= 54, r <= 96 else { return nil }
         let ang = atan2(dy, dx) * 180 / .pi               // 0° = right, clockwise (y-down)
         var f = (ang + 90).truncatingRemainder(dividingBy: 360)
         if f < 0 { f += 360 }
