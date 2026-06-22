@@ -241,7 +241,6 @@ struct ProductivityDonut: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(r.color).frame(width: 9, height: 9)
                 Text(r.name).font(.rowTitle).foregroundStyle(Theme.Ink.primary)
                 Spacer()
                 Text("\(total > 0 ? pct[index] : 0)%")
