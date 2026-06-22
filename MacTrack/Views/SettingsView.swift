@@ -214,47 +214,53 @@ private struct StepperButton: View {
     }
 }
 
-/// A thick, rounded slider with tick marks and a white knob — the premium look,
-/// replacing the thin native Slider. Drags continuously and snaps to `step`.
+/// A thick, fully-accent rounded track with faint tick dots and a white pill knob
+/// — replicating the reference slider. The whole track is the accent color; the
+/// knob's position (not a fill edge) shows the value. Drags + snaps to `step`.
 private struct PremiumSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     var step: Double = 1
     var accent: Color = Theme.focus
-    var ticks: Int = 9
+    var ticks: Int = 11
 
     private let trackHeight: CGFloat = 28
-    private let knob: CGFloat = 22
+    private let knobW: CGFloat = 30
+    private let knobH: CGFloat = 22
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let span = range.upperBound - range.lowerBound
             let frac = span > 0 ? min(max((value - range.lowerBound) / span, 0), 1) : 0
-            let knobX = knob / 2 + frac * (w - knob)
+            let knobX = frac * (w - knobW)   // leading-edge offset of the knob
 
             ZStack(alignment: .leading) {
-                Capsule().fill(Theme.fill(2))
-                Capsule().fill(accent)
-                    .frame(width: min(w, knobX + knob / 2))
+                // Full accent track with a subtle top-to-bottom sheen.
+                Capsule().fill(
+                    LinearGradient(colors: [accent, accent.opacity(0.88)],
+                                   startPoint: .top, endPoint: .bottom)
+                )
+                // Evenly spaced tick dots, vertically centered, inset past the caps.
                 HStack(spacing: 0) {
                     ForEach(0..<ticks, id: \.self) { i in
-                        Circle().fill(Color.white.opacity(0.30)).frame(width: 3, height: 3)
+                        Circle().fill(Color.white.opacity(0.32)).frame(width: 3, height: 3)
                         if i < ticks - 1 { Spacer(minLength: 0) }
                     }
                 }
                 .padding(.horizontal, trackHeight / 2)
-                Circle()
+                // White horizontal pill knob, inset within the track.
+                Capsule()
                     .fill(.white)
-                    .frame(width: knob, height: knob)
-                    .shadow(color: .black.opacity(0.28), radius: 2.5, y: 1)
-                    .offset(x: knobX - knob / 2)
+                    .frame(width: knobW, height: knobH)
+                    .shadow(color: .black.opacity(0.22), radius: 2.5, y: 1)
+                    .offset(x: knobX)
             }
             .frame(height: trackHeight)
             .contentShape(Capsule())
             .gesture(
                 DragGesture(minimumDistance: 0).onChanged { g in
-                    let f = min(max((g.location.x - knob / 2) / (w - knob), 0), 1)
+                    let f = min(max((g.location.x - knobW / 2) / (w - knobW), 0), 1)
                     let raw = range.lowerBound + f * span
                     let stepped = step > 0 ? (raw / step).rounded() * step : raw
                     value = min(max(stepped, range.lowerBound), range.upperBound)
