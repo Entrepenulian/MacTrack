@@ -214,42 +214,42 @@ private struct StepperButton: View {
     }
 }
 
-/// A thick, fully-accent rounded track with faint tick dots and a white pill knob
-/// — replicating the reference slider. The whole track is the accent color; the
-/// knob's position (not a fill edge) shows the value. Drags + snaps to `step`.
+/// A normal fill-left slider: the accent fills only up to the knob, the rest is a
+/// neutral track. Tick dots mark every step and the knob snaps to each one — it
+/// can't land between dots.
 private struct PremiumSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     var step: Double = 1
     var accent: Color = Theme.focus
-    var ticks: Int = 11
 
     private let trackHeight: CGFloat = 28
     private let knobW: CGFloat = 30
     private let knobH: CGFloat = 22
+
+    private var dotCount: Int {
+        guard step > 0 else { return 2 }
+        return max(2, Int(((range.upperBound - range.lowerBound) / step).rounded()) + 1)
+    }
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let span = range.upperBound - range.lowerBound
             let frac = span > 0 ? min(max((value - range.lowerBound) / span, 0), 1) : 0
-            let knobX = frac * (w - knobW)   // leading-edge offset of the knob
+            let travel = w - knobW
+            let knobX = frac * travel                       // knob leading-edge offset
 
             ZStack(alignment: .leading) {
-                // Full accent track with a subtle top-to-bottom sheen.
-                Capsule().fill(
-                    LinearGradient(colors: [accent, accent.opacity(0.88)],
-                                   startPoint: .top, endPoint: .bottom)
-                )
-                // Evenly spaced tick dots, vertically centered, inset past the caps.
-                HStack(spacing: 0) {
-                    ForEach(0..<ticks, id: \.self) { i in
-                        Circle().fill(Color.white.opacity(0.32)).frame(width: 3, height: 3)
-                        if i < ticks - 1 { Spacer(minLength: 0) }
-                    }
+                Capsule().fill(Theme.fill(2))               // neutral (unfilled) track
+                Capsule().fill(accent)                      // accent fill — only up to the knob
+                    .frame(width: min(w, knobX + knobW))
+                // Tick dots sit exactly on the snap positions (where the knob lands).
+                ForEach(0..<dotCount, id: \.self) { i in
+                    let cx = knobW / 2 + (Double(i) / Double(dotCount - 1)) * travel
+                    Circle().fill(Color.white.opacity(0.33)).frame(width: 3, height: 3)
+                        .position(x: cx, y: trackHeight / 2)
                 }
-                .padding(.horizontal, trackHeight / 2)
-                // White horizontal pill knob, inset within the track.
                 Capsule()
                     .fill(.white)
                     .frame(width: knobW, height: knobH)
@@ -258,9 +258,10 @@ private struct PremiumSlider: View {
             }
             .frame(height: trackHeight)
             .contentShape(Capsule())
+            .animation(.snappy(duration: 0.14), value: value)   // crisp snap between dots
             .gesture(
                 DragGesture(minimumDistance: 0).onChanged { g in
-                    let f = min(max((g.location.x - knobW / 2) / (w - knobW), 0), 1)
+                    let f = min(max((g.location.x - knobW / 2) / travel, 0), 1)
                     let raw = range.lowerBound + f * span
                     let stepped = step > 0 ? (raw / step).rounded() * step : raw
                     value = min(max(stepped, range.lowerBound), range.upperBound)
