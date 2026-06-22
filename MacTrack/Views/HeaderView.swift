@@ -4,6 +4,7 @@ struct HeaderView: View {
     @EnvironmentObject var store: UsageStore
     @EnvironmentObject var monitor: ActivityMonitor
     @Binding var showSettings: Bool
+    @Binding var showOverview: Bool
 
     /// The thing currently in focus — a website if you're on one, otherwise the
     /// app. The big readout reflects *this*, not the whole-day total.
@@ -18,19 +19,7 @@ struct HeaderView: View {
         store.focusSeconds(domain: monitor.currentDomain, bundleID: monitor.currentBundleID)
     }
 
-    var body: some View {
-        if showSettings {
-            HStack(alignment: .center) {
-                SectionLabel(text: "Settings")
-                Spacer()
-                GlassIconButton(systemName: "chevron.left", size: 26, help: "Back") {
-                    withAnimation(.calmSlow) { showSettings = false }
-                }
-            }
-        } else {
-            hero
-        }
-    }
+    var body: some View { hero }
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -42,13 +31,18 @@ struct HeaderView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer(minLength: Theme.Space.sm)
+                GlassIconButton(systemName: showOverview ? "chart.pie.fill" : "chart.pie",
+                                size: 26,
+                                help: showOverview ? "Show details" : "Show productivity") {
+                    showOverview.toggle()
+                }
                 GlassIconButton(systemName: monitor.isPaused ? "play.fill" : "pause.fill",
                                 size: 26,
                                 help: monitor.isPaused ? "Resume tracking" : "Pause tracking") {
                     monitor.setPaused(!monitor.isPaused)
                 }
                 GlassIconButton(systemName: "gearshape", size: 26, help: "Settings") {
-                    withAnimation(.calmSlow) { showSettings = true }
+                    showSettings = true
                 }
             }
 
