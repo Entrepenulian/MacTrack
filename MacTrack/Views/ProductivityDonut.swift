@@ -78,8 +78,8 @@ struct ProductivityDonut: View {
                     .trim(from: arc.from, to: arc.to)
                     .stroke(arc.color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     // Each section glows in its own color — a tight glow plus a soft halo.
-                    .shadow(color: arc.color.opacity(0.65), radius: 5)
-                    .shadow(color: arc.color.opacity(0.40), radius: 12)
+                    .shadow(color: arc.color.opacity(0.36), radius: 3)
+                    .shadow(color: arc.color.opacity(0.18), radius: 8)
                     .rotationEffect(.degrees(-90))
             }
         }
