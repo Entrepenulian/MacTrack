@@ -7,13 +7,18 @@ import SwiftUI
 @MainActor
 final class AppModel: ObservableObject {
     let store: UsageStore
+    let blocks: BlockController
     let monitor: ActivityMonitor
     let loginItem: LoginItem
+    let filter = BlockFilterManager()
 
     init() {
-        let store = UsageStore()
+        let database = try? DatabaseStore()        // one shared connection
+        let store = UsageStore(database: database)
         self.store = store
-        self.monitor = ActivityMonitor(store: store)
+        let blocks = BlockController(db: database)
+        self.blocks = blocks
+        self.monitor = ActivityMonitor(store: store, blocks: blocks)
         self.loginItem = LoginItem()
 
         monitor.start()
@@ -39,6 +44,8 @@ struct MacTrackApp: App {
                 .environmentObject(model.store)
                 .environmentObject(model.monitor)
                 .environmentObject(model.loginItem)
+                .environmentObject(model.blocks)
+                .environmentObject(model.filter)
         } label: {
             MenuBarLabel()
                 .environmentObject(model.store)
