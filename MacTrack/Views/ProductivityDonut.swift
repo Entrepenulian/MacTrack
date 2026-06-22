@@ -134,22 +134,33 @@ struct ProductivityDonut: View {
         return nil
     }
 
+    /// Which section the center shows: the hovered one, or — by default — the
+    /// section with the highest percentage.
+    private var shownIndex: Int {
+        if let h = hoveredSlice { return h }
+        let p = pct
+        return p.indices.max(by: { p[$0] < p[$1] }) ?? 0
+    }
+
     private var center: some View {
         VStack(spacing: 1) {
             if total > 0 {
-                Text("\(pct[0])%")
+                let idx = shownIndex
+                Text("\(pct[idx])%")
                     .font(.system(size: 32, weight: .semibold))
                     .monospacedDigit()
                     .foregroundStyle(Theme.Ink.primary)
-                    .contentTransition(.numericText())
-                Text("productive")
+                    .contentTransition(.numericText())          // digits flip in/out on change
+                Text(rows[idx].name.lowercased())
                     .font(.caption2Strong)
                     .foregroundStyle(Theme.Ink.tertiary)
+                    .contentTransition(.opacity)                // crossfade the label on change
             } else {
                 Text("—").font(.system(size: 30, weight: .semibold)).foregroundStyle(Theme.Ink.tertiary)
                 Text("no time yet").font(.caption2Strong).foregroundStyle(Theme.Ink.faint)
             }
         }
+        .animation(.smooth(duration: 0.3), value: shownIndex)
     }
 
     private var legend: some View {
