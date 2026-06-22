@@ -37,17 +37,36 @@ struct GlassPanelBackground: View {
         Color.clear
             .glassEffect(.regular, in: shape)
             .overlay(shape.fill(scrim))
+            .overlay(ambientGlow)
             .overlay(
                 // A single, whisper-quiet rim — top a touch brighter than bottom,
                 // the way light catches a real glass edge. No hard outline.
                 shape.strokeBorder(
                     LinearGradient(
-                        colors: [.white.opacity(0.10), .white.opacity(0.02)],
+                        colors: [.white.opacity(0.12), .white.opacity(0.02)],
                         startPoint: .top, endPoint: .bottom
                     ),
                     lineWidth: 0.5
                 )
             )
+    }
+
+    /// A slight ambient glow so the panel feels lit, not flat: a soft cool light
+    /// from the top and a faint warm wash rising from the bottom.
+    private var ambientGlow: some View {
+        ZStack {
+            RadialGradient(
+                colors: [Color.white.opacity(scheme == .dark ? 0.09 : 0.05), .clear],
+                center: UnitPoint(x: 0.5, y: -0.08), startRadius: 0, endRadius: 300
+            )
+            RadialGradient(
+                colors: [Theme.focus.opacity(0.06), .clear],
+                center: UnitPoint(x: 0.5, y: 1.08), startRadius: 0, endRadius: 260
+            )
+        }
+        .clipShape(shape)
+        .blendMode(.plusLighter)
+        .allowsHitTesting(false)
     }
 }
 
