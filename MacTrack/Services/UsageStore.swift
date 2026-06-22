@@ -14,6 +14,10 @@ final class UsageStore: ObservableObject {
     @Published private(set) var excludedApps: Set<String> = []
     @Published private(set) var excludedSites: Set<String> = []
 
+    /// Productivity tags. Untagged apps/sites count as "Other". Stored in the database.
+    @Published private(set) var appTags: [String: ProductivityTag] = [:]
+    @Published private(set) var siteTags: [String: ProductivityTag] = [:]
+
     /// Today's per-minute samples, keyed "kind:key" → (minute → seconds). Drives
     /// the line chart. Persisted via the database; cached here for fast reads.
     private(set) var todaySamples: [String: [Int: Double]] = [:]
@@ -25,11 +29,10 @@ final class UsageStore: ObservableObject {
 
     private let db: DatabaseStore?
 
-    init() {
-        let database = try? DatabaseStore()
-        self.db = database
+    init(database: DatabaseStore? = nil) {
+        self.db = database ?? (try? DatabaseStore())
 
-        if let database {
+        if let database = db {
             database.makeDailyBackup()
             importLegacyJSONIfNeeded(into: database)
             days = database.loadDays()
@@ -37,6 +40,11 @@ final class UsageStore: ObservableObject {
             excludedApps = ex.apps
             excludedSites = ex.sites
             todaySamples = database.loadSamples(day: DayKey.today)
+            for t in database.loadTags() {
+                guard let cat = ProductivityTag(rawValue: t.category) else { continue }
+                if t.kind == "app" { appTags[t.value] = cat }
+                else if t.kind == "site" { siteTags[t.value] = cat }
+            }
         }
     }
 
@@ -121,6 +129,70 @@ final class UsageStore: ObservableObject {
         db?.deleteSite(domain: domain)
         db?.setExclusion(kind: "site", value: domain)
         revision &+= 1
+    }
+
+    // MARK: Productivity tags
+
+    func appTag(_ bundleID: String) -> ProductivityTag? { appTags[bundleID] }
+    func siteTag(_ domain: String) -> ProductivityTag? { siteTags[domain] }
+    var hasAnyTags: Bool { !appTags.isEmpty || !siteTags.isEmpty }
+
+    func setAppTag(_ bundleID: String, _ tag: ProductivityTag?) {
+        if let tag {
+            appTags[bundleID] = tag
+            db?.setTag(kind: "app", value: bundleID, category: tag.rawValue)
+        } else {
+            appTags.removeValue(forKey: bundleID)
+            db?.clearTag(kind: "app", value: bundleID)
+        }
+        revision &+= 1
+    }
+
+    func setSiteTag(_ domain: String, _ tag: ProductivityTag?) {
+        if let tag {
+            siteTags[domain] = tag
+            db?.setTag(kind: "site", value: domain, category: tag.rawValue)
+        } else {
+            siteTags.removeValue(forKey: domain)
+            db?.clearTag(kind: "site", value: domain)
+        }
+        revision &+= 1
+    }
+
+    /// Today's focused time split into Productive / Unproductive / Other. Browser
+    /// apps are skipped (their per-site time is counted instead, so nothing is
+    /// double-counted); untagged time falls into Other.
+    func productivitySplit(for dayKey: String) -> (productive: Double, unproductive: Double, other: Double) {
+        guard let day = days[dayKey] else { return (0, 0, 0) }
+        var p = 0.0, u = 0.0, o = 0.0
+        var browserSeconds = 0.0
+        for stat in day.apps.values
+        where !excludedApps.contains(stat.bundleID) && !SystemApps.isBlocked(stat.bundleID) {
+            if BrowserURLReader.isBrowser(stat.bundleID) {
+                browserSeconds += stat.seconds   // represented by its sites below
+                continue
+            }
+            switch appTags[stat.bundleID] {
+            case .productive: p += stat.seconds
+            case .unproductive: u += stat.seconds
+            case .none: o += stat.seconds
+            }
+        }
+        var siteSeconds = 0.0
+        for stat in day.sites.values where !excludedSites.contains(stat.domain) {
+            siteSeconds += stat.seconds
+            switch siteTags[stat.domain] {
+            case .productive: p += stat.seconds
+            case .unproductive: u += stat.seconds
+            case .none: o += stat.seconds
+            }
+        }
+        // Browser time on tabs with no resolvable domain (a new/empty tab, an
+        // internal page, or any browsing before Automation permission is granted)
+        // is never attributed to a site — count that residual as Other so the
+        // donut total reflects all focused time.
+        o += max(0, browserSeconds - siteSeconds)
+        return (p, u, o)
     }
 
     // MARK: Derived rows
