@@ -35,6 +35,15 @@ enum Theme {
     /// category also uses, because attention online is where time leaks.
     static let focus = Color(hex: 0xE0A45E)
 
+    /// Settings-page accent — a brighter, more deliberate orange for controls.
+    static let settingsAccent = Color(hex: 0xFF6A1A)
+
+    /// Productivity palette: productive shares the settings orange, unproductive a
+    /// paired red, other a neutral gray.
+    static let productive = Color(hex: 0xFF6A1A)
+    static let unproductive = Color(hex: 0xE5484D)
+    static let neutralSlice = Color(hex: 0x70707A)
+
     /// Ten distinguishable, lightly-muted line colors for the usage chart. The
     /// first is the focus amber so the top item ties to the brand accent. Used
     /// by chart line N and the matching list row's color dot.
