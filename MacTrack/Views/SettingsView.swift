@@ -34,8 +34,7 @@ struct SettingsView: View {
                             Text("\(Int(idleThreshold))s")
                                 .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
                         }
-                        Slider(value: $idleThreshold, in: 30...600, step: 30)
-                            .controlSize(.small).tint(Theme.settingsAccent)
+                        PremiumSlider(value: $idleThreshold, range: 30...600, step: 30, accent: Theme.settingsAccent)
                             .onChange(of: idleThreshold) { _, v in monitor.setIdleThreshold(v) }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 11)
@@ -212,5 +211,56 @@ private struct StepperButton: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
         .onHover { hovering = $0 }
+    }
+}
+
+/// A thick, rounded slider with tick marks and a white knob — the premium look,
+/// replacing the thin native Slider. Drags continuously and snaps to `step`.
+private struct PremiumSlider: View {
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double = 1
+    var accent: Color = Theme.focus
+    var ticks: Int = 9
+
+    private let trackHeight: CGFloat = 28
+    private let knob: CGFloat = 22
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let span = range.upperBound - range.lowerBound
+            let frac = span > 0 ? min(max((value - range.lowerBound) / span, 0), 1) : 0
+            let knobX = knob / 2 + frac * (w - knob)
+
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.fill(2))
+                Capsule().fill(accent)
+                    .frame(width: min(w, knobX + knob / 2))
+                HStack(spacing: 0) {
+                    ForEach(0..<ticks, id: \.self) { i in
+                        Circle().fill(Color.white.opacity(0.30)).frame(width: 3, height: 3)
+                        if i < ticks - 1 { Spacer(minLength: 0) }
+                    }
+                }
+                .padding(.horizontal, trackHeight / 2)
+                Circle()
+                    .fill(.white)
+                    .frame(width: knob, height: knob)
+                    .shadow(color: .black.opacity(0.28), radius: 2.5, y: 1)
+                    .offset(x: knobX - knob / 2)
+            }
+            .frame(height: trackHeight)
+            .contentShape(Capsule())
+            .gesture(
+                DragGesture(minimumDistance: 0).onChanged { g in
+                    let f = min(max((g.location.x - knob / 2) / (w - knob), 0), 1)
+                    let raw = range.lowerBound + f * span
+                    let stepped = step > 0 ? (raw / step).rounded() * step : raw
+                    value = min(max(stepped, range.lowerBound), range.upperBound)
+                }
+            )
+        }
+        .frame(height: trackHeight)
     }
 }
