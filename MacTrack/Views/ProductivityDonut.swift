@@ -25,7 +25,8 @@ struct ProductivityDonut: View {
     /// claims 100% while other slices still hold real time.
     private var pct: [Int] { Self.percentages([productive, unproductive, other]) }
 
-    private let lineWidth: CGFloat = 18
+    private let lineWidth: CGFloat = 14       // default slice thickness
+    private let hoverWidth: CGFloat = 18      // the hovered slice grows to this
     private let gap: Double = 0.05   // gap between rounded segments (activity-ring look)
 
     var body: some View {
@@ -82,12 +83,10 @@ struct ProductivityDonut: View {
         return ZStack {
             ForEach(Array(arcs.enumerated()), id: \.offset) { _, arc in
                 let hot = hoveredSlice == arc.index
-                let dimmed = hoveredSlice != nil && !hot   // another slice is hovered
                 Circle()
                     .trim(from: arc.from, to: arc.to)
-                    .stroke(arc.color, style: StrokeStyle(lineWidth: dimmed ? lineWidth - 4 : lineWidth, lineCap: .round))
-                    // Each section glows in its own color; the glow grows on hover while
-                    // the other two thin out a touch to emphasize the one you're on.
+                    .stroke(arc.color, style: StrokeStyle(lineWidth: hot ? hoverWidth : lineWidth, lineCap: .round))
+                    // Slices are thin by default; the hovered one grows and glows more.
                     .shadow(color: arc.color.opacity(hot ? 0.55 : 0.36), radius: hot ? 5 : 3)
                     .shadow(color: arc.color.opacity(hot ? 0.34 : 0.18), radius: hot ? 14 : 8)
                     .rotationEffect(.degrees(-90))
