@@ -23,6 +23,15 @@ Most time trackers are heavy, paid, and want your data. MacTrack is the opposite
 - **Block distractions.** Right-click anything and block it for 15 minutes to 2 hours. While a block is live there is no off switch — a locked countdown, plus app-hiding and tab-bouncing, keeps you out until it expires. An optional **system-level filter** (a signed Network Extension) makes it DoH-proof and keeps working even if you quit MacTrack — see [SETUP_BLOCKING.md](SETUP_BLOCKING.md).
 - **Good-night mode.** One tap stops tracking for the night and auto-resumes at the wake time you set, so late-night idle never skews your day.
 
+## Focus & productivity
+
+Right-click any app or website and mark it **Productive** or **Unproductive**. The pie-chart toggle in the header flips the popover to a productivity overview — one donut splitting your day into Productive / Unproductive / Other, with the productive share called out in the middle. Untagged time is Other, so the picture is honest from day one.
+
+<p align="center">
+  <img src="docs/donut.png" width="300" alt="Productivity overview donut" />
+  <img src="docs/productivity.png" width="300" alt="Tagging an app productive or unproductive" />
+</p>
+
 ## Privacy
 
 - **Local-first.** Your history lives in a SQLite database at `~/Library/Application Support/MacTrack/`. It is never uploaded anywhere.
