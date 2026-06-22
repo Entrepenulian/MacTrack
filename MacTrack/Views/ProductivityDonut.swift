@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// The productivity overview: a ring split into Productive / Unproductive / Other,
 /// the productive share called out in the center, and a legend below.
@@ -7,6 +8,9 @@ struct ProductivityDonut: View {
     let unproductive: Double
     let other: Double
     let hasTags: Bool
+
+    @State private var hoveredSlice: Int? = nil
+    @State private var cursorActive = false
 
     private var total: Double { productive + unproductive + other }
 
@@ -28,6 +32,8 @@ struct ProductivityDonut: View {
         VStack(spacing: 18) {
             ring
                 .frame(width: 156, height: 156)
+                .onContinuousHover(coordinateSpace: .local) { handleHover($0) }
+                .onDisappear { if cursorActive { NSCursor.pop(); cursorActive = false } }
                 .padding(.top, 6)
             legend
             if !hasTags {
@@ -58,32 +64,69 @@ struct ProductivityDonut: View {
     }
 
     private var segments: some View {
-        let nonZero = rows.filter { $0.value > 0 }
-        let useGap = nonZero.count > 1
+        let useGap = rows.filter { $0.value > 0 }.count > 1
         var cursor = 0.0
-        var arcs: [(from: Double, to: Double, color: Color)] = []
-        for r in nonZero {
+        var arcs: [(from: Double, to: Double, color: Color, index: Int)] = []
+        for (i, r) in rows.enumerated() {
             let frac = r.value / total
-            // Inset each end for the gap, but never past the slice's midpoint, so a
-            // small slice still draws a rounded nub instead of vanishing.
-            let inset = useGap ? min(gap / 2, frac / 2) : 0
-            let from = cursor + inset
-            let to = max(from, cursor + frac - inset)
-            arcs.append((from, to, r.color))
+            if frac > 0 {
+                // Inset each end for the gap, but never past the slice's midpoint, so a
+                // small slice still draws a rounded nub instead of vanishing.
+                let inset = useGap ? min(gap / 2, frac / 2) : 0
+                let from = cursor + inset
+                let to = max(from, cursor + frac - inset)
+                arcs.append((from, to, r.color, i))
+            }
             cursor += frac
         }
         return ZStack {
             ForEach(Array(arcs.enumerated()), id: \.offset) { _, arc in
+                let hot = hoveredSlice == arc.index
                 Circle()
                     .trim(from: arc.from, to: arc.to)
                     .stroke(arc.color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                    // Each section glows in its own color — a tight glow plus a soft halo.
-                    .shadow(color: arc.color.opacity(0.36), radius: 3)
-                    .shadow(color: arc.color.opacity(0.18), radius: 8)
+                    // Each section glows in its own color; the glow grows on hover.
+                    .shadow(color: arc.color.opacity(hot ? 0.55 : 0.36), radius: hot ? 5 : 3)
+                    .shadow(color: arc.color.opacity(hot ? 0.34 : 0.18), radius: hot ? 14 : 8)
                     .rotationEffect(.degrees(-90))
             }
         }
         .animation(.calm, value: total)
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: hoveredSlice)
+    }
+
+    private func handleHover(_ phase: HoverPhase) {
+        switch phase {
+        case .active(let p):
+            let idx = sliceIndex(at: p)
+            hoveredSlice = idx
+            if idx != nil && !cursorActive { NSCursor.pointingHand.push(); cursorActive = true }
+            else if idx == nil && cursorActive { NSCursor.pop(); cursorActive = false }
+        case .ended:
+            hoveredSlice = nil
+            if cursorActive { NSCursor.pop(); cursorActive = false }
+        }
+    }
+
+    /// Which slice (row index) the cursor is over on the ring, from its angle and
+    /// distance from the center. Returns nil for the hole, the center, or outside.
+    private func sliceIndex(at p: CGPoint) -> Int? {
+        guard total > 0 else { return nil }
+        let c = 78.0
+        let dx = Double(p.x) - c, dy = Double(p.y) - c
+        let r = (dx * dx + dy * dy).squareRoot()
+        guard r >= 62, r <= 92 else { return nil }       // within the ring band
+        let ang = atan2(dy, dx) * 180 / .pi               // 0° = right, clockwise (y-down)
+        var f = (ang + 90).truncatingRemainder(dividingBy: 360)
+        if f < 0 { f += 360 }
+        let frac = f / 360                                // clockwise from the top, [0,1)
+        var cum = 0.0
+        for (i, row) in rows.enumerated() {
+            let w = row.value / total
+            if w > 0, frac >= cum, frac < cum + w { return i }
+            cum += w
+        }
+        return nil
     }
 
     private var center: some View {
