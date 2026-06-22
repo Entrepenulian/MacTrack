@@ -34,7 +34,7 @@ struct SettingsView: View {
                             Text("\(Int(idleThreshold))s")
                                 .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
                         }
-                        PremiumSlider(value: $idleThreshold, range: 30...600, step: 30, accent: Theme.settingsAccent)
+                        PremiumSlider(value: $idleThreshold, range: 60...600, step: 60, accent: Theme.settingsAccent)
                             .onChange(of: idleThreshold) { _, v in monitor.setIdleThreshold(v) }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 11)
@@ -245,18 +245,18 @@ private struct PremiumSlider: View {
 
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.fill(2))               // neutral (unfilled) track
-                // Tick dots sit on the snap positions, drawn *under* the accent fill so
-                // they only show on the unfilled (gray) part — the orange covers the rest.
-                ForEach(0..<dotCount, id: \.self) { i in
-                    let cx = inset + knobW / 2 + (Double(i) / Double(dotCount - 1)) * travel
-                    Circle().fill(Color.white.opacity(0.35)).frame(width: 3, height: 3)
-                        .position(x: cx, y: trackHeight / 2)
-                }
                 // Accent fill always extends one inset past the knob's trailing edge, so
                 // the knob keeps an equal orange margin on every side at any position
                 // (and the fill reaches full width exactly at max).
                 Capsule().fill(accent)
                     .frame(width: min(w, knobX + knobW + inset))
+                // Tick dots on the snap positions, drawn on top so they show on both the
+                // filled (orange) and unfilled parts.
+                ForEach(0..<dotCount, id: \.self) { i in
+                    let cx = inset + knobW / 2 + (Double(i) / Double(dotCount - 1)) * travel
+                    Circle().fill(Color.white.opacity(0.33)).frame(width: 3, height: 3)
+                        .position(x: cx, y: trackHeight / 2)
+                }
                 Capsule()
                     .fill(.white)
                     .frame(width: knobW, height: knobH)
