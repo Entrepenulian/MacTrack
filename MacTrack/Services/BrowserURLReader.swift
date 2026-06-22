@@ -77,6 +77,22 @@ final class BrowserURLReader {
         }
     }
 
+    /// Forces the active tab off a blocked site by loading about:blank.
+    func blockActiveTab(bundleID: String) {
+        guard let browser = Self.browsers[bundleID] else { return }
+        queue.async {
+            let source = """
+            tell application "\(browser.appName)"
+                if (count of windows) is 0 then return
+                try
+                    set URL of \(browser.tabAccessor) of front window to "about:blank"
+                end try
+            end tell
+            """
+            NSAppleScript(source: source)?.executeAndReturnError(nil)
+        }
+    }
+
     private func script(for browser: Browser) -> NSAppleScript {
         if let existing = compiled[browser.bundleID] { return existing }
         // Returns "url<US>title" or empty string if there's no front window.
