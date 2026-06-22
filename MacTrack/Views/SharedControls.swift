@@ -14,14 +14,13 @@ struct GlassIconButton: View {
                 .font(.system(size: size * 0.42, weight: .semibold))
                 .foregroundStyle(hovering ? Color.white : Theme.Ink.secondary)
                 .frame(width: size, height: size)
-                .glassEffect(.regular.interactive(), in: Circle())
+                // Non-interactive glass: it's a visual material only, so it never
+                // intercepts the click (the interactive variant was swallowing taps)
+                // and there's no hover-lift to cause flicker. White-on-hover is manual.
+                .glassEffect(.regular, in: Circle())
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        // Hover is detected on this FIXED outer frame, not on the glass itself.
-        // The glass's hover-lift is render-only, so the hit area never moves and
-        // the cursor can't fall outside — no flicker. Icon snaps straight to white.
-        .frame(width: size, height: size)
-        .contentShape(Circle())
         .onHover { hovering = $0 }
         .help(help)
     }
