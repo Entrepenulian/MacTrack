@@ -107,7 +107,29 @@ final class DatabaseStore {
             try setUserVersion(3)
             version = 3
         }
-        // Future schema changes: `if version < 3 { ...; try setUserVersion(3) }`
+
+        if version < 4 {
+            // Scheduled blocks (screen-time): app/site blocked until an end time.
+            try exec("""
+                CREATE TABLE IF NOT EXISTS block(
+                    id TEXT PRIMARY KEY, kind TEXT NOT NULL, value TEXT NOT NULL,
+                    endsAt REAL NOT NULL, createdAt REAL NOT NULL);
+                """)
+            try setUserVersion(4)
+            version = 4
+        }
+
+        if version < 5 {
+            // Productivity tags: app/site classified productive or unproductive.
+            try exec("""
+                CREATE TABLE IF NOT EXISTS tag(
+                    kind TEXT NOT NULL, value TEXT NOT NULL, category TEXT NOT NULL,
+                    PRIMARY KEY(kind, value));
+                """)
+            try setUserVersion(5)
+            version = 5
+        }
+        // Future schema changes: `if version < 6 { ...; try setUserVersion(6) }`
         // Existing data is preserved — migrations are additive.
     }
 
@@ -266,6 +288,50 @@ final class DatabaseStore {
     func deleteSite(domain: String) { run("DELETE FROM siteUsage WHERE domain = ?", [.text(domain)]) }
     func setExclusion(kind: String, value: String) {
         run("INSERT OR IGNORE INTO exclusion(kind, value) VALUES(?, ?)", [.text(kind), .text(value)])
+    }
+
+    // MARK: Blocks
+
+    func loadBlocks() -> [BlockRecord] {
+        var rows: [BlockRecord] = []
+        query("SELECT id, kind, value, endsAt, createdAt FROM block") { stmt in
+            guard let id = textColumn(stmt, 0), let kind = textColumn(stmt, 1), let value = textColumn(stmt, 2) else { return }
+            rows.append(BlockRecord(
+                id: id, kind: kind, value: value,
+                endsAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3)),
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4))))
+        }
+        return rows
+    }
+    func upsertBlock(id: String, kind: String, value: String, endsAt: Double, createdAt: Double) {
+        run("""
+            INSERT INTO block(id, kind, value, endsAt, createdAt) VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET endsAt = max(endsAt, excluded.endsAt)
+            """, [.text(id), .text(kind), .text(value), .double(endsAt), .double(createdAt)])
+    }
+    func updateBlockEnds(id: String, endsAt: Double) {
+        run("UPDATE block SET endsAt = ? WHERE id = ?", [.double(endsAt), .text(id)])
+    }
+    func deleteBlock(id: String) { run("DELETE FROM block WHERE id = ?", [.text(id)]) }
+
+    // MARK: Productivity tags
+
+    func loadTags() -> [(kind: String, value: String, category: String)] {
+        var rows: [(kind: String, value: String, category: String)] = []
+        query("SELECT kind, value, category FROM tag") { stmt in
+            guard let k = textColumn(stmt, 0), let v = textColumn(stmt, 1), let c = textColumn(stmt, 2) else { return }
+            rows.append((kind: k, value: v, category: c))
+        }
+        return rows
+    }
+    func setTag(kind: String, value: String, category: String) {
+        run("""
+            INSERT INTO tag(kind, value, category) VALUES(?, ?, ?)
+            ON CONFLICT(kind, value) DO UPDATE SET category = excluded.category
+            """, [.text(kind), .text(value), .text(category)])
+    }
+    func clearTag(kind: String, value: String) {
+        run("DELETE FROM tag WHERE kind = ? AND value = ?", [.text(kind), .text(value)])
     }
 
     func importDay(_ record: DayRecord) {
