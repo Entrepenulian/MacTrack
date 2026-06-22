@@ -25,6 +25,13 @@ enum Format {
         return [("\(s)", "s")]
     }
 
+    /// Countdown like "28:14" or "1:05:00" for active blocks.
+    static func countdown(_ seconds: Double) -> String {
+        let t = Int(seconds.rounded(.up))
+        let h = t / 3600, m = (t / 60) % 60, s = t % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
+
     /// "Tuesday, June 20" style header subtitle.
     static func longDate(_ date: Date) -> String {
         let f = DateFormatter()
