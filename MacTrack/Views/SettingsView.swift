@@ -245,8 +245,11 @@ private struct PremiumSlider: View {
 
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.fill(2))               // neutral (unfilled) track
-                Capsule().fill(accent)                      // accent fill — only up to the knob
-                    .frame(width: min(w, knobX + knobW))
+                // Accent fill is value-proportional (full at max), so the knob sits
+                // *inside* the orange with an equal margin on its right — the fill
+                // edge stays hidden under the knob for in-between values.
+                Capsule().fill(accent)
+                    .frame(width: max(0, frac * w))
                 // Tick dots sit exactly on the snap positions (where the knob lands).
                 ForEach(0..<dotCount, id: \.self) { i in
                     let cx = inset + knobW / 2 + (Double(i) / Double(dotCount - 1)) * travel
