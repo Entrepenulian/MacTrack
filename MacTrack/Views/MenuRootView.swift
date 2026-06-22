@@ -6,6 +6,7 @@ import SwiftUI
 struct MenuRootView: View {
     @EnvironmentObject var store: UsageStore
     @EnvironmentObject var monitor: ActivityMonitor
+    @EnvironmentObject var blocks: BlockController
 
     @State private var scope: UsageScope = {
         switch ProcessInfo.processInfo.environment["MACTRACK_SCOPE"] {
@@ -14,7 +15,8 @@ struct MenuRootView: View {
         default: return .apps
         }
     }()
-    @State private var showSettings = false
+    @State private var showSettings = ProcessInfo.processInfo.environment["MACTRACK_SETTINGS"] != nil
+    @AppStorage("showOverview") private var showOverview = false
     @AppStorage("idleThreshold") private var idleThreshold: Double = 120
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
     @AppStorage("chartEndHour") private var chartEndHour: Int = 22
@@ -31,55 +33,11 @@ struct MenuRootView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HeaderView(showSettings: $showSettings)
-
+        Group {
             if showSettings {
-                divider.padding(.top, 16).padding(.bottom, 14)
-                SettingsView()
-                    .frame(minHeight: 280)
-                    .transition(.opacity)
+                SettingsView(onBack: { showSettings = false })
             } else {
-                divider.padding(.top, 16).padding(.bottom, 14)
-                HStack(spacing: 8) {
-                    SegmentedToggle(selection: $scope)
-                    AllButton(selection: $scope)
-                }
-
-                listHeader
-                    .padding(.top, 14)
-                    .padding(.bottom, 4)
-
-                VStack(spacing: 2) {
-                    if scope == .websites && monitor.automationDenied {
-                        PermissionNudge { Permissions.openAutomationSettings() }
-                            .padding(.bottom, 6)
-                    }
-                    if entries.isEmpty {
-                        EmptyStateView(scope: scope)
-                    } else {
-                        UsageListView(entries: entries)
-                    }
-                }
-                .id(scope)
-                .transition(.opacity)
-                .animation(.calm, value: scope)
-
-                if !entries.isEmpty {
-                    insetDivider.padding(.top, 14).padding(.bottom, 12)
-                    UsageChartView(
-                        lines: store.chartLines(entries: entries,
-                                                startMinute: chartStartHour * 60,
-                                                endMinute: chartEndHour * 60),
-                        startMinute: chartStartHour * 60,
-                        endMinute: chartEndHour * 60
-                    )
-                    .id(scope)
-                    .transition(.opacity)
-                }
-
-                divider.padding(.top, 12).padding(.bottom, 11)
-                footer
+                mainContent
             }
         }
         .padding(18)
@@ -87,6 +45,104 @@ struct MenuRootView: View {
         .background(GlassPanelBackground())
         .background(WindowAccessor())
         .onAppear { monitor.setIdleThreshold(idleThreshold) }
+    }
+
+    private var mainContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HeaderView(showSettings: $showSettings, showOverview: $showOverview)
+
+            if !blocks.activeBlocks.isEmpty {
+                blockBanner
+            }
+
+            if showOverview {
+                let split = store.productivitySplit(for: DayKey.today)
+                ProductivityDonut(productive: split.productive,
+                                  unproductive: split.unproductive,
+                                  other: split.other,
+                                  hasTags: store.hasAnyTags)
+                    .padding(.top, 16)
+                    .transition(.opacity)
+            } else {
+                detailsBody
+                    .transition(.opacity)
+            }
+        }
+        .animation(.calm, value: showOverview)
+    }
+
+    /// The ranked Apps / Websites / All list plus the line chart and footer.
+    private var detailsBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            divider.padding(.top, 16).padding(.bottom, 14)
+            HStack(spacing: 8) {
+                SegmentedToggle(selection: $scope)
+                AllButton(selection: $scope)
+            }
+
+            listHeader
+                .padding(.top, 14)
+                .padding(.bottom, 4)
+
+            VStack(spacing: 2) {
+                if scope == .websites && monitor.automationDenied {
+                    PermissionNudge { Permissions.openAutomationSettings() }
+                        .padding(.bottom, 6)
+                }
+                if entries.isEmpty {
+                    EmptyStateView(scope: scope)
+                } else {
+                    UsageListView(entries: entries)
+                }
+            }
+            .id(scope)
+            .transition(.opacity)
+            .animation(.calm, value: scope)
+
+            if !entries.isEmpty {
+                insetDivider.padding(.top, 14).padding(.bottom, 12)
+                UsageChartView(
+                    lines: store.chartLines(entries: entries,
+                                            startMinute: chartStartHour * 60,
+                                            endMinute: chartEndHour * 60),
+                    startMinute: chartStartHour * 60,
+                    endMinute: chartEndHour * 60
+                )
+                .id(scope)
+                .transition(.opacity)
+            }
+
+            divider.padding(.top, 12).padding(.bottom, 11)
+            footer
+        }
+    }
+
+    /// Active blocks with a live countdown. No cancel control — a block can only
+    /// end by running out, so there's deliberately nothing here to tap.
+    private var blockBanner: some View {
+        let blockColor = Color(hex: 0xF0544A)
+        return VStack(spacing: 6) {
+            ForEach(blocks.activeBlocks) { b in
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(blockColor)
+                    Text(b.label)
+                        .font(.rowMeta.weight(.medium))
+                        .foregroundStyle(Theme.Ink.primary)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 6)
+                    Text(Format.countdown(b.remaining))
+                        .font(.rowValue.monospacedDigit())
+                        .foregroundStyle(blockColor)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(blockColor.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous)
+                    .strokeBorder(blockColor.opacity(0.22), lineWidth: 0.5))
+            }
+        }
+        .padding(.top, 12)
     }
 
     private var divider: some View {
