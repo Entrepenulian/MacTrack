@@ -9,6 +9,7 @@ struct SettingsView: View {
     @AppStorage("idleThreshold") private var idleThreshold: Double = 120
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
     @AppStorage("chartEndHour") private var chartEndHour: Int = 22
+    @AppStorage("wakeHour") private var wakeHour: Int = 8
     var onBack: () -> Void
 
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -38,6 +39,8 @@ struct SettingsView: View {
                             .onChange(of: idleThreshold) { _, v in monitor.setIdleThreshold(v) }
                     }
                     .padding(.horizontal, 14).padding(.vertical, 11)
+                    rowDivider
+                    stepperRow("Wake time", value: $wakeHour, range: 0...23)
                 }
             }
 
