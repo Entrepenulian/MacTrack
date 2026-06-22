@@ -77,6 +77,14 @@ Launch at login can be turned on in settings.
 
 To measure per-website time, MacTrack reads the active tab's address through macOS **Automation** (Apple Events). The first time it reads a browser, macOS asks for permission. Allow it, or website time won't be recorded. You can change it later in **System Settings → Privacy & Security → Automation**, or from the gear in MacTrack.
 
+## Settings
+
+Open settings from the gear in the popover: launch at login, the idle timeout, your good-night **wake time**, the chart's start and end hours, website-tracking permission, and the system-level blocking toggle.
+
+<p align="center">
+  <img src="docs/settings.png" width="280" alt="Settings" />
+</p>
+
 ## How it works
 
 A once-a-second sampler measures the real elapsed time between ticks and credits it to whatever is in focus: the frontmost app, and the active tab's domain if that app is a browser. Large gaps (sleep, wake) are dropped, and idle or locked time is skipped. Totals roll up per day; a lightweight per-minute series powers the chart. Writes are incremental and crash-safe (SQLite WAL), with daily backups and automatic restore.
@@ -88,10 +96,11 @@ Swift, SwiftUI, and AppKit. SQLite via the system library (no third-party depend
 ```
 MacTrack/
   App/        entry point and lifecycle
-  Models/     usage records, categories, chart data
-  Services/   sampler, browser reader, idle detector, store, database, icons
+  Models/     usage records, categories, productivity tags, chart data
+  Services/   sampler, browser reader, idle detector, blocks, system-extension control, store, database, icons
   Design/     theme tokens, glass, formatters
-  Views/      popover, header, list, chart, settings
+  Views/      popover, header, list, chart, productivity donut, settings
+NetworkFilter/  the system-level content-filter extension (see SETUP_BLOCKING.md)
 ```
 
 ## License
