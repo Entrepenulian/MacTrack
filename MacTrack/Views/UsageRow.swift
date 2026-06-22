@@ -46,14 +46,6 @@ struct UsageRow: View, Equatable {
 
             Spacer(minLength: Theme.Space.sm)
 
-            // Shows at a glance how this row is tagged (orange = productive,
-            // red = unproductive). Nothing when untagged, so untagged rows stay clean.
-            if let tag = currentTag {
-                Circle()
-                    .fill(tag == .productive ? Theme.productive : Theme.unproductive)
-                    .frame(width: 6, height: 6)
-            }
-
             Text(Format.duration(entry.seconds))
                 .font(.rowValue.monospacedDigit())
                 .foregroundStyle(Theme.Ink.secondary)
