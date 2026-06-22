@@ -262,7 +262,7 @@ struct ProductivityDonut: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             } else {
                 VStack(spacing: 2) {
-                    ForEach(items.prefix(7)) { BreakdownRow(entry: $0, color: r.color) }
+                    ForEach(items.prefix(7)) { BreakdownRow(entry: $0, color: r.color, categoryTotal: r.value) }
                     if items.count > 7 {
                         Text("+\(items.count - 7) more")
                             .font(.rowMeta).foregroundStyle(Theme.Ink.faint)
@@ -309,7 +309,15 @@ struct ProductivityDonut: View {
 private struct BreakdownRow: View {
     let entry: UsageEntry
     let color: Color
+    let categoryTotal: Double
     @State private var hovering = false
+
+    /// Share of its own category (e.g. 30m of 60m productive → 50%). Any real time
+    /// shows at least 1%, so a tiny entry never reads "0%".
+    private var percent: Int {
+        guard categoryTotal > 0, entry.seconds > 0 else { return 0 }
+        return max(1, Int((entry.seconds / categoryTotal * 100).rounded()))
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -318,8 +326,11 @@ private struct BreakdownRow: View {
                 .font(.rowTitle).foregroundStyle(Theme.Ink.primary)
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 8)
+            Text("\(percent)%")
+                .font(.rowMeta.monospacedDigit()).foregroundStyle(Theme.Ink.tertiary)
             Text(Format.duration(entry.seconds))
                 .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.Ink.secondary)
+                .frame(minWidth: 46, alignment: .trailing)
         }
         .padding(.horizontal, 8)
         .frame(height: 34)
