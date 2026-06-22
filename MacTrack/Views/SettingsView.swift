@@ -156,11 +156,11 @@ struct SettingsView: View {
     }
 
     private func stepperRow(_ title: String, value: Binding<Int>, range: ClosedRange<Int>) -> some View {
-        HStack {
+        HStack(spacing: 10) {
             Text(title).font(.rowTitle).foregroundStyle(Theme.Ink.primary)
             Spacer()
             Text(hourLabel(value.wrappedValue)).font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
-            Stepper("", value: value, in: range).labelsHidden()
+            PremiumStepper(value: value, range: range, accent: Theme.settingsAccent)
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
     }
@@ -169,5 +169,48 @@ struct SettingsView: View {
         let h12 = hour % 12 == 0 ? 12 : hour % 12
         let ap = (hour >= 12 && hour < 24) ? "PM" : "AM"
         return "\(h12) \(ap)"
+    }
+}
+
+/// A compact custom stepper — a rounded pill with − / + buttons that tint to the
+/// accent on hover. Replaces the native (clunky) Stepper.
+private struct PremiumStepper: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    var accent: Color = Theme.focus
+
+    var body: some View {
+        HStack(spacing: 0) {
+            StepperButton(symbol: "minus", enabled: value > range.lowerBound, accent: accent) {
+                if value > range.lowerBound { value -= 1 }
+            }
+            Rectangle().fill(Theme.hairline).frame(width: 0.5, height: 14)
+            StepperButton(symbol: "plus", enabled: value < range.upperBound, accent: accent) {
+                if value < range.upperBound { value += 1 }
+            }
+        }
+        .background(Theme.fill(1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
+    }
+}
+
+private struct StepperButton: View {
+    let symbol: String
+    let enabled: Bool
+    let accent: Color
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(!enabled ? Theme.Ink.faint : (hovering ? accent : Theme.Ink.secondary))
+                .frame(width: 32, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .onHover { hovering = $0 }
     }
 }
