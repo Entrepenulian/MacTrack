@@ -32,6 +32,16 @@ Right-click any app or website and mark it **Productive** or **Unproductive**. T
   <img src="docs/productivity.png" width="300" alt="Tagging an app productive or unproductive" />
 </p>
 
+## Blocking
+
+Need to lock yourself out of something? Right-click any app or site, choose **Block**, and pick 15 minutes to 2 hours. A locked countdown appears in the popover with no cancel button — while it runs, MacTrack hides the blocked app and bounces blocked tabs, and the block survives quitting and relaunching. It also resists clock tampering: moving your clock forward can't skip a running block.
+
+<p align="center">
+  <img src="docs/blocking.png" width="320" alt="Blocking an app for a set time" />
+</p>
+
+That app-side layer can be dodged by force-quitting MacTrack. For a bulletproof, system-wide block — a signed **Network Extension** content filter, DoH-proof and enforced by macOS itself even when MacTrack isn't running — see **[SETUP_BLOCKING.md](SETUP_BLOCKING.md)**. It needs your own Apple Developer signing, so it ships as code plus a step-by-step guide.
+
 ## Privacy
 
 - **Local-first.** Your history lives in a SQLite database at `~/Library/Application Support/MacTrack/`. It is never uploaded anywhere.
