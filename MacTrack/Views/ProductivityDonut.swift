@@ -46,7 +46,11 @@ struct ProductivityDonut: View {
             // chevron) to return to the legend.
             ZStack {
                 if let sel = selected {
-                    detail(for: sel).transition(.opacity)
+                    // .id(sel) gives each category its own identity, so switching from
+                    // one slice to another crossfades the rows instead of snapping.
+                    detail(for: sel)
+                        .id(sel)
+                        .transition(.opacity)
                 } else {
                     VStack(spacing: 12) {
                         legend
