@@ -1,0 +1,11 @@
+// Local signing config for the system-level blocking build (Tier 3).
+//
+// Copy this file to `Signing.xcconfig` (which is gitignored) and put your real
+// 10-character Apple Developer Team ID below. The signed build spec
+// (project.signed.yml) reads it, so your Team ID never lands in the public repo.
+//
+//   cp Signing.xcconfig.example Signing.xcconfig
+//   # then edit DEVELOPMENT_TEAM
+//
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+CODE_SIGN_STYLE = Automatic

@@ -1,0 +1,60 @@
+# Signed build for system-level blocking (Tier 3).
+#
+# This includes the normal project.yml and layers on top of it:
+#   - the NetworkFilter system extension target, embedded into the app
+#   - real code signing (your Team ID comes from the gitignored Signing.xcconfig)
+#
+# The default `xcodegen generate` (project.yml) still produces the fast, unsigned
+# dev build. Use THIS spec only when you want the real, quit-proof blocker:
+#
+#   cp Signing.xcconfig.example Signing.xcconfig   # once; set your Team ID
+#   xcodegen generate --spec project.signed.yml
+#   open MacTrack.xcodeproj                         # build to /Applications
+#
+# See SETUP_BLOCKING.md for the full walkthrough.
+
+include:
+  - project.yml
+
+configFiles:
+  Debug: Signing.xcconfig
+  Release: Signing.xcconfig
+
+settings:
+  base:
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+    CODE_SIGNING_REQUIRED: "YES"
+    CODE_SIGNING_ALLOWED: "YES"
+    ENABLE_HARDENED_RUNTIME: "YES"
+
+targets:
+  MacTrack:
+    # Embed the extension into Contents/Library/SystemExtensions so the OS can
+    # discover and activate it.
+    dependencies:
+      - target: NetworkFilter
+        embed: true
+
+  NetworkFilter:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: NetworkFilter
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mactrack.MacTrack.NetworkFilter
+        PRODUCT_NAME: NetworkFilter
+        CODE_SIGN_ENTITLEMENTS: NetworkFilter/NetworkFilter.entitlements
+        INFOPLIST_KEY_NSSystemExtensionUsageDescription: "MacTrack blocks distracting sites system-wide."
+        GENERATE_INFOPLIST_FILE: "YES"
+        # A NetworkExtension provider has no main() — the entry point is the
+        # Foundation-provided NSExtensionMain, which loads NSExtensionPrincipalClass.
+        OTHER_LDFLAGS: "-e _NSExtensionMain"
+    info:
+      path: NetworkFilter/Info.generated.plist
+      properties:
+        CFBundleDisplayName: MacTrack Filter
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.filter-data
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FilterDataProvider
