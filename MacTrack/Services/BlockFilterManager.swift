@@ -12,7 +12,7 @@ import SystemExtensions
 /// remains the active layer. See SETUP_BLOCKING.md.
 final class BlockFilterManager: NSObject, ObservableObject {
     /// Must match the system-extension target's bundle identifier.
-    static let extensionIdentifier = "com.mactrack.MacTrack.NetworkFilter"
+    static let extensionIdentifier = "com.julianhahne.MacTrack.NetworkFilter"
 
     @Published private(set) var statusText: String = "Off"
     @Published private(set) var isBusy = false

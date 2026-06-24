@@ -14,7 +14,7 @@ import Network
 /// is not compiled into the unsigned app build. Add it to a dedicated system
 /// extension target as described in SETUP_BLOCKING.md.
 final class FilterDataProvider: NEFilterDataProvider {
-    private let appGroup = "group.com.mactrack.MacTrack"
+    private let appGroup = "group.com.julianhahne.MacTrack"
     private var blocked: Set<String> = []
 
     override func startFilter(completionHandler: @escaping (Error?) -> Void) {

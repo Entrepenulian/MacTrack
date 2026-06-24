@@ -26,7 +26,7 @@ final class BlockController: ObservableObject {
 
     /// Shared with the Network Extension (Tier 3) so the system filter sees the
     /// same blocked sites. Must match the App Group on both targets.
-    static let appGroup = "group.com.mactrack.MacTrack"
+    static let appGroup = "group.com.julianhahne.MacTrack"
 
     private let db: DatabaseStore?
     private var lastMonotonic = ProcessInfo.processInfo.systemUptime
