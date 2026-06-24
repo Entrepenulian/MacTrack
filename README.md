@@ -20,6 +20,7 @@ Most time trackers are heavy, paid, and want your data. MacTrack is the opposite
 - **Glanceable totals.** The menu bar shows live time for whatever you are on right now. Open the popover for the full breakdown.
 - **Right-click to ignore.** Don't want something tracked? Right-click any row and choose "Don't track." It disappears and stays gone.
 - **A productivity score.** Tag any app or site as productive or unproductive (right-click → **Productivity**). MacTrack rolls your day into a Productive / Unproductive / Other donut so you see your focus at a glance; anything untagged counts as Other.
+- **A history you can scrub.** A GitHub-style activity grid colors each past day by what dominated it — productive, unproductive, or other. Click any day to rewind the whole popover — donut, ranked list, and chart — to that day's data.
 - **Block distractions.** Right-click anything and block it for 15 minutes to 2 hours. While a block is live there is no off switch — a locked countdown, plus app-hiding and tab-bouncing, keeps you out until it expires. An optional **system-level filter** (a signed Network Extension) makes it DoH-proof and keeps working even if you quit MacTrack — see [SETUP_BLOCKING.md](SETUP_BLOCKING.md).
 - **Good-night mode.** One tap stops tracking for the night and auto-resumes at the wake time you set, so late-night idle never skews your day.
 
@@ -30,6 +31,16 @@ Right-click any app or website and mark it **Productive** or **Unproductive**. T
 <p align="center">
   <img src="docs/donut.png" width="300" alt="Productivity overview donut" />
   <img src="docs/productivity.png" width="300" alt="Tagging an app productive or unproductive" />
+</p>
+
+### Your history, day by day
+
+Below the donut, a GitHub-style **activity grid** built from squircles colors each past day by the category that took the most time that day — Productive (amber), Unproductive (red), or Other (gray) — each with a soft matching glow. Today stays a neutral gray until the day is over, so it only commits to a color once the winner is final; days later in the week aren't drawn yet.
+
+Click any day's square to **rewind the whole popover to that day**: the donut, the Productive / Unproductive / Other split, the ranked apps-and-sites list, and the line chart all animate to that day's data, and the header shows the date and total with a **Today** button to jump back.
+
+<p align="center">
+  <img src="docs/activity.png" width="300" alt="Activity grid colored by each day's dominant category" />
 </p>
 
 ## Blocking
