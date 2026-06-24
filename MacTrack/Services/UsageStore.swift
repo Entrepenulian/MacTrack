@@ -23,6 +23,9 @@ final class UsageStore: ObservableObject {
     private(set) var todaySamples: [String: [Int: Double]] = [:]
     /// The calendar day `todaySamples` belongs to — reset when the day rolls over.
     private var samplesDay: String = DayKey.today
+    /// Per-minute samples for past days, loaded from the database on demand (for the
+    /// chart) and cached so re-rendering a viewed day is cheap.
+    private var pastSamples: [String: [String: [Int: Double]]] = [:]
 
     /// Bumped on every attribution so dependent views recompute live.
     @Published private(set) var revision: Int = 0
@@ -195,6 +198,25 @@ final class UsageStore: ObservableObject {
         return (p, u, o)
     }
 
+    /// For each of the last `daysBack` days that has any tracked time, the category
+    /// that dominated it — 0 Productive, 1 Unproductive, 2 Other — keyed by day.
+    /// Powers the activity grid, which colors each day by its winner.
+    func dailyWinners(daysBack: Int) -> [String: Int] {
+        var result: [String: Int] = [:]
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date())
+        for i in 0..<max(0, daysBack) {
+            guard let date = cal.date(byAdding: .day, value: -i, to: start) else { continue }
+            let key = DayKey.key(for: date)
+            guard days[key] != nil else { continue }     // no record → empty cell
+            let s = productivitySplit(for: key)
+            let vals = [s.productive, s.unproductive, s.other]
+            if vals.reduce(0, +) <= 0 { continue }
+            if let win = vals.indices.max(by: { vals[$0] < vals[$1] }) { result[key] = win }
+        }
+        return result
+    }
+
     /// The apps/sites that make up one productivity bucket — `tag == nil` means
     /// Other (untagged) — sorted by time, with a within-bucket fraction for the row
     /// wash. Browsers are skipped (their time is represented by their sites).
@@ -291,10 +313,13 @@ final class UsageStore: ObservableObject {
     /// Builds cumulative-minutes line series for the given (already ranked) top
     /// entries, within the visible [startMinute, endMinute] window. Each line ends
     /// at its full total, so the chart's endpoints match the list's times.
-    func chartLines(entries: [UsageEntry], startMinute: Int, endMinute: Int) -> [ChartLineData] {
-        let nowMinute = min(DayKey.minuteOfDay, endMinute)
+    func chartLines(entries: [UsageEntry], for dayKey: String, startMinute: Int, endMinute: Int) -> [ChartLineData] {
+        let daySamples = samples(for: dayKey)
+        // Today's line stops at the current minute; a finished past day runs to the
+        // end of the window.
+        let cap = dayKey == samplesDay ? min(DayKey.minuteOfDay, endMinute) : endMinute
         return entries.prefix(10).enumerated().map { index, entry in
-            let samples = todaySamples[entry.id] ?? [:]
+            let samples = daySamples[entry.id] ?? [:]
             let minutes = samples.keys.sorted()
             var cumulative = 0.0
             var points: [CGPoint] = []
@@ -302,19 +327,29 @@ final class UsageStore: ObservableObject {
             // Roll up everything that happened before the visible window starts.
             while i < minutes.count, minutes[i] < startMinute { cumulative += samples[minutes[i]] ?? 0; i += 1 }
             points.append(CGPoint(x: Double(startMinute), y: cumulative / 60.0))
-            while i < minutes.count, minutes[i] <= nowMinute {
+            while i < minutes.count, minutes[i] <= cap {
                 cumulative += samples[minutes[i]] ?? 0
                 points.append(CGPoint(x: Double(minutes[i]), y: cumulative / 60.0))
                 i += 1
             }
-            // Extend the line flat to "now" so it always reaches the current time.
+            // Extend the line flat to the cap so it always reaches the window's edge.
             let lastX = points.last.map { Double($0.x) } ?? Double(startMinute)
-            if lastX < Double(nowMinute) {
-                points.append(CGPoint(x: Double(nowMinute), y: cumulative / 60.0))
+            if lastX < Double(cap) {
+                points.append(CGPoint(x: Double(cap), y: cumulative / 60.0))
             }
             return ChartLineData(id: entry.id, label: entry.title, color: Theme.chartColor(index),
                                  points: points, totalMinutes: cumulative / 60.0)
         }
+    }
+
+    /// Per-minute samples for a day: today's live cache, or a past day's loaded
+    /// lazily from the database and kept for reuse.
+    private func samples(for dayKey: String) -> [String: [Int: Double]] {
+        if dayKey == samplesDay { return todaySamples }
+        if let cached = pastSamples[dayKey] { return cached }
+        let loaded = db?.loadSamples(day: dayKey) ?? [:]
+        pastSamples[dayKey] = loaded
+        return loaded
     }
 
     /// Category breakdown (today) — kept for future use.
