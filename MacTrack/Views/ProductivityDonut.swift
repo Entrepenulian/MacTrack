@@ -107,20 +107,13 @@ struct ProductivityDonut: View {
     }
 
     private var segments: some View {
-        let useGap = rows.filter { $0.value > 0 }.count > 1
-        var cursor = 0.0
-        var arcs: [(from: Double, to: Double, color: Color, index: Int)] = []
-        for (i, r) in rows.enumerated() {
-            let frac = r.value / total
-            if frac > 0 {
-                // Inset each end for the gap, but never past the slice's midpoint, so a
-                // small slice still draws a rounded nub instead of vanishing.
-                let inset = useGap ? min(gap / 2, frac / 2) : 0
-                let from = cursor + inset
-                let to = max(from, cursor + frac - inset)
-                arcs.append((from, to, r.color, i))
-            }
-            cursor += frac
+        let layout = sliceLayout
+        let useGap = layout.count > 1
+        let arcs: [(from: Double, to: Double, color: Color, index: Int)] = layout.map { s in
+            let inset = useGap ? gap / 2 : 0
+            let from = s.start + inset
+            let to = max(from + 0.004, s.end - inset)
+            return (from, to, s.color, s.index)
         }
         return ZStack {
             ForEach(Array(arcs.enumerated()), id: \.offset) { _, arc in
@@ -137,6 +130,49 @@ struct ProductivityDonut: View {
         .animation(.calm, value: total)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: hoveredSlice)
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.28), value: selected)
+    }
+
+    /// Each non-zero slice's `[start, end]` span of the full ring. Every slice is
+    /// allocated at least a minimum arc so a tiny one (1–4%) still draws a clear
+    /// segment instead of vanishing into a gap; the surplus is taken from the
+    /// larger slices. The center % and legend keep showing the true values — only
+    /// the drawn proportions are nudged. Hit-testing reads this same layout.
+    private var sliceLayout: [(index: Int, start: Double, end: Double, color: Color)] {
+        guard total > 0 else { return [] }
+        let nz = rows.enumerated().filter { $0.element.value > 0 }
+        guard !nz.isEmpty else { return [] }
+        // Reserve enough that, after the gap is inset on both ends, the smallest
+        // slice still draws a visible arc (~0.04 of the ring).
+        let minA = nz.count > 1 ? gap + 0.04 : 0
+        let alloc = Self.allocate(nz.map { $0.element.value / total }, minA: minA)
+        var cursor = 0.0
+        var out: [(index: Int, start: Double, end: Double, color: Color)] = []
+        for (k, item) in nz.enumerated() {
+            out.append((item.offset, cursor, cursor + alloc[k], item.element.color))
+            cursor += alloc[k]
+        }
+        return out
+    }
+
+    /// Give every slice at least `minA` of the ring, taking the surplus from the
+    /// larger slices proportionally (pinning the smallest first, iterating). Input
+    /// and output both sum to 1.
+    static func allocate(_ fracs: [Double], minA: Double) -> [Double] {
+        guard minA > 0, fracs.count > 1, minA * Double(fracs.count) < 1 else { return fracs }
+        var a = fracs
+        var pinned = [Bool](repeating: false, count: fracs.count)
+        for _ in 0..<fracs.count {
+            var deficit = 0.0
+            for i in a.indices where !pinned[i] && a[i] < minA {
+                deficit += minA - a[i]; a[i] = minA; pinned[i] = true
+            }
+            if deficit <= 0 { break }
+            let freeSum = a.indices.filter { !pinned[$0] }.reduce(0.0) { $0 + a[$1] }
+            guard freeSum > deficit else { break }
+            let scale = (freeSum - deficit) / freeSum
+            for i in a.indices where !pinned[i] { a[i] *= scale }
+        }
+        return a
     }
 
     private func handleHover(_ phase: HoverPhase) {
@@ -166,12 +202,8 @@ struct ProductivityDonut: View {
         var f = (ang + 90).truncatingRemainder(dividingBy: 360)
         if f < 0 { f += 360 }
         let frac = f / 360                                // clockwise from the top, [0,1)
-        var cum = 0.0
-        for (i, row) in rows.enumerated() {
-            let w = row.value / total
-            if w > 0, frac >= cum, frac < cum + w { return i }
-            cum += w
-        }
+        // Match the drawn (min-size-allocated) layout so you hover what you see.
+        for s in sliceLayout where frac >= s.start && frac < s.end { return s.index }
         return nil
     }
 
