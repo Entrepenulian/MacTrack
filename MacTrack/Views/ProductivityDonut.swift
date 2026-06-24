@@ -8,6 +8,10 @@ struct ProductivityDonut: View {
     let unproductive: Double
     let other: Double
     let hasTags: Bool
+    /// The day the popover is currently showing (so the matching square highlights).
+    var selectedDay: String? = nil
+    /// Called when a past day's square is tapped — the popover switches to that day.
+    var onSelectDay: (String) -> Void = { _ in }
 
     @State private var hoveredSlice: Int? = nil
     @State private var cursorActive = false
@@ -55,6 +59,7 @@ struct ProductivityDonut: View {
                     VStack(spacing: 12) {
                         legend
                         if !hasTags { hint }
+                        activitySection
                     }
                     .transition(.opacity)
                 }
@@ -63,6 +68,18 @@ struct ProductivityDonut: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 4)
+    }
+
+    /// A GitHub-style activity grid under the legend, separated by a hairline.
+    /// Visual only for now — the squircles light up once its data is wired.
+    private var activitySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Rectangle().fill(Theme.hairline).frame(height: 0.5)
+            ActivityGraph(winners: store.dailyWinners(daysBack: 140),
+                          selectedDay: selectedDay,
+                          onSelect: onSelectDay)
+        }
+        .padding(.horizontal, 4)
     }
 
     private var hint: some View {
@@ -200,10 +217,12 @@ struct ProductivityDonut: View {
                     Text("\(total > 0 ? pct[i] : 0)%")
                         .font(.rowMeta.monospacedDigit())
                         .foregroundStyle(Theme.Ink.tertiary)
+                        .contentTransition(.numericText())
                     Text(Format.duration(r.value))
                         .font(.rowValue.monospacedDigit())
                         .foregroundStyle(Theme.Ink.primary)
                         .frame(minWidth: 54, alignment: .trailing)
+                        .contentTransition(.numericText())
                 }
             }
         }
