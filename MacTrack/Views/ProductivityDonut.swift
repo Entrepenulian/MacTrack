@@ -8,6 +8,8 @@ struct ProductivityDonut: View {
     let unproductive: Double
     let other: Double
     let hasTags: Bool
+    /// The day whose data is shown — drives the slice drill-down's apps/sites too.
+    var day: String = DayKey.today
     /// The day the popover is currently showing (so the matching square highlights).
     var selectedDay: String? = nil
     /// Called when a past day's square is tapped — the popover switches to that day.
@@ -251,7 +253,7 @@ struct ProductivityDonut: View {
     /// apps/sites that make it up, each with its share wash and time.
     private func detail(for index: Int) -> some View {
         let r = rows[index]
-        let items = store.productivityItems(tag: tagFor(index), for: DayKey.today)
+        let items = store.productivityItems(tag: tagFor(index), for: day)
         return VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Button {

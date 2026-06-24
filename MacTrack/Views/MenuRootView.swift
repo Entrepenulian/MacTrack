@@ -78,6 +78,7 @@ struct MenuRootView: View {
                                   unproductive: split.unproductive,
                                   other: split.other,
                                   hasTags: store.hasAnyTags,
+                                  day: viewDay,
                                   selectedDay: isViewingToday ? nil : viewDay,
                                   onSelectDay: selectDay)
                     .padding(.top, 16)
