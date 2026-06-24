@@ -5,7 +5,13 @@ struct HeaderView: View {
     @EnvironmentObject var monitor: ActivityMonitor
     @Binding var showSettings: Bool
     @Binding var showOverview: Bool
+    /// The day the popover is showing. Today → live focus; a past day → that day's
+    /// date and total tracked time, with a "Today" button to return.
+    var viewDay: String = DayKey.today
+    var onReturnToToday: () -> Void = {}
     @AppStorage("wakeHour") private var wakeHour: Int = 8
+
+    private var isToday: Bool { viewDay == DayKey.today }
 
     /// The thing currently in focus — a website if you're on one, otherwise the
     /// app. The big readout reflects *this*, not the whole-day total.
@@ -15,12 +21,22 @@ struct HeaderView: View {
         return "Today"
     }
 
-    /// Today's accumulated time for the current focus (the website, or the app).
     private var focusSeconds: Double {
         store.focusSeconds(domain: monitor.currentDomain, bundleID: monitor.currentBundleID)
     }
 
+    /// A past day's total tracked time (its three productivity buckets summed).
+    private var dayTotalSeconds: Double {
+        let s = store.productivitySplit(for: viewDay)
+        return s.productive + s.unproductive + s.other
+    }
+
+    /// What the big number shows: live focus today, the day's total in the past.
+    private var readoutSeconds: Double { isToday ? focusSeconds : dayTotalSeconds }
+    private var dimmed: Bool { isToday && (monitor.isPaused || monitor.isSleeping) }
+
     private var headerLabel: String {
+        if !isToday { return Self.dateLabel(viewDay) }
         if monitor.isSleeping { return "Asleep until \(hourLabel(wakeHour))" }
         if monitor.isPaused { return "Paused" }
         return focusLabel
@@ -36,23 +52,44 @@ struct HeaderView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Controls sit on the same line as the focus label — no wordmark, no
-            // status dot. When paused, the label says so; otherwise it names what
-            // you're looking at. Liveness is implicit in the number counting up.
+            // Controls share the focus line. When viewing a past day the label
+            // becomes that day's date, the pause control gives way to a "Today"
+            // button, and the number below shows that day's total.
             HStack(alignment: .center, spacing: 6) {
                 SectionLabel(text: headerLabel)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .contentTransition(.opacity)
                 Spacer(minLength: Theme.Space.sm)
+
+                if !isToday {
+                    Button(action: onReturnToToday) {
+                        Text("Today")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.settingsAccent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Theme.fill(1), in: Capsule())
+                            .overlay(Capsule().strokeBorder(Theme.hairline, lineWidth: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Back to today")
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+
                 GlassIconButton(systemName: showOverview ? "chart.pie.fill" : "chart.pie",
                                 size: 26,
                                 help: showOverview ? "Show details" : "Show productivity") {
+                    // Toggling the view is "going home" — always snap back to today.
+                    onReturnToToday()
                     showOverview.toggle()
                 }
-                GlassIconButton(systemName: monitor.isPaused ? "play.fill" : "pause.fill",
-                                size: 26,
-                                help: monitor.isPaused ? "Resume tracking" : "Pause tracking") {
-                    monitor.setPaused(!monitor.isPaused)
+                if isToday {
+                    GlassIconButton(systemName: monitor.isPaused ? "play.fill" : "pause.fill",
+                                    size: 26,
+                                    help: monitor.isPaused ? "Resume tracking" : "Pause tracking") {
+                        monitor.setPaused(!monitor.isPaused)
+                    }
                 }
                 GlassIconButton(systemName: "gearshape", size: 26, help: "Settings") {
                     showSettings = true
@@ -60,10 +97,10 @@ struct HeaderView: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
-                ForEach(Array(Format.readoutParts(focusSeconds).enumerated()), id: \.offset) { _, part in
+                ForEach(Array(Format.readoutParts(readoutSeconds).enumerated()), id: \.offset) { _, part in
                     Text(part.value)
                         .font(.system(size: 34, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(monitor.isPaused || monitor.isSleeping ? Theme.Ink.tertiary : Theme.Ink.primary)
+                        .foregroundStyle(dimmed ? Theme.Ink.tertiary : Theme.Ink.primary)
                         .contentTransition(.numericText())
                     Text(part.unit)
                         .font(.system(size: 16, weight: .medium))
@@ -72,11 +109,31 @@ struct HeaderView: View {
                 }
             }
             .lineLimit(1)
-            // Seconds (and minutes when they roll) flip in with the native numeric
-            // transition; switching apps/sites flips to that focus's running total.
-            .animation(.smooth(duration: 0.3), value: Int(focusSeconds))
+            // Seconds flip in with the native numeric transition; switching days
+            // flips to that day's total.
+            .animation(.smooth(duration: 0.3), value: Int(readoutSeconds))
             .animation(.calm, value: monitor.isPaused)
             .animation(.calm, value: monitor.isSleeping)
         }
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.4), value: isToday)
+    }
+
+    // MARK: Date label
+
+    private static let keyParser: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+    private static let dayOut: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE, MMM d"
+        return f
+    }()
+    /// "2026-06-21" → "Sun, Jun 21".
+    static func dateLabel(_ key: String) -> String {
+        guard let d = keyParser.date(from: key) else { return key }
+        return dayOut.string(from: d)
     }
 }
