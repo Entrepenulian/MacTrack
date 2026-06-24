@@ -16,21 +16,34 @@ struct MenuRootView: View {
         }
     }()
     @State private var showSettings = ProcessInfo.processInfo.environment["MACTRACK_SETTINGS"] != nil
+    /// The day the popover is showing. Defaults to today; tapping a past day in the
+    /// activity grid switches every section — donut, list, chart — to that day.
+    @State private var viewDay: String = DayKey.today
     @AppStorage("showOverview") private var showOverview = false
     @AppStorage("idleThreshold") private var idleThreshold: Double = 120
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
     @AppStorage("chartEndHour") private var chartEndHour: Int = 22
 
-    private var appEntries: [UsageEntry] { store.appEntries(for: DayKey.today) }
-    private var siteEntries: [UsageEntry] { store.siteEntries(for: DayKey.today) }
+    private var isViewingToday: Bool { viewDay == DayKey.today }
+    private var appEntries: [UsageEntry] { store.appEntries(for: viewDay) }
+    private var siteEntries: [UsageEntry] { store.siteEntries(for: viewDay) }
     private var entries: [UsageEntry] {
+        // The live "site you're on now" only applies to today.
+        let live = isViewingToday ? monitor.currentDomain : nil
         switch scope {
         case .apps: return appEntries
         // Websites hides sub-minute visits, but always shows the site you're on now.
-        case .websites: return store.siteEntries(for: DayKey.today, minSeconds: 60, alwaysInclude: monitor.currentDomain)
-        case .all: return store.allEntries(for: DayKey.today, currentDomain: monitor.currentDomain)
+        case .websites: return store.siteEntries(for: viewDay, minSeconds: 60, alwaysInclude: live)
+        case .all: return store.allEntries(for: viewDay, currentDomain: live)
         }
     }
+
+    private let dayCurve: Animation = .timingCurve(0.22, 1, 0.36, 1, duration: 0.4)
+    /// Switch to a day's data (or back to today if its square is tapped again).
+    private func selectDay(_ day: String) {
+        withAnimation(dayCurve) { viewDay = (viewDay == day) ? DayKey.today : day }
+    }
+    private func returnToToday() { withAnimation(dayCurve) { viewDay = DayKey.today } }
 
     var body: some View {
         Group {
@@ -49,18 +62,24 @@ struct MenuRootView: View {
 
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HeaderView(showSettings: $showSettings, showOverview: $showOverview)
+            HeaderView(showSettings: $showSettings, showOverview: $showOverview,
+                       viewDay: viewDay, onReturnToToday: returnToToday)
 
-            if !blocks.activeBlocks.isEmpty {
+            // Active-block countdowns belong to "right now" on the details view —
+            // hide them on the productivity overview and when looking back at a
+            // past day.
+            if !showOverview && isViewingToday && !blocks.activeBlocks.isEmpty {
                 blockBanner
             }
 
             if showOverview {
-                let split = store.productivitySplit(for: DayKey.today)
+                let split = store.productivitySplit(for: viewDay)
                 ProductivityDonut(productive: split.productive,
                                   unproductive: split.unproductive,
                                   other: split.other,
-                                  hasTags: store.hasAnyTags)
+                                  hasTags: store.hasAnyTags,
+                                  selectedDay: isViewingToday ? nil : viewDay,
+                                  onSelectDay: selectDay)
                     .padding(.top, 16)
                     .transition(.opacity)
             } else {
@@ -95,20 +114,20 @@ struct MenuRootView: View {
                     UsageListView(entries: entries)
                 }
             }
-            .id(scope)
+            .id("\(scope)-\(viewDay)")
             .transition(.opacity)
             .animation(.calm, value: scope)
 
             if !entries.isEmpty {
                 insetDivider.padding(.top, 14).padding(.bottom, 12)
                 UsageChartView(
-                    lines: store.chartLines(entries: entries,
+                    lines: store.chartLines(entries: entries, for: viewDay,
                                             startMinute: chartStartHour * 60,
                                             endMinute: chartEndHour * 60),
                     startMinute: chartStartHour * 60,
                     endMinute: chartEndHour * 60
                 )
-                .id(scope)
+                .id("\(scope)-\(viewDay)")
                 .transition(.opacity)
             }
 
