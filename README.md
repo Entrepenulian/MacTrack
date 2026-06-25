@@ -113,17 +113,21 @@ A once-a-second sampler measures the real elapsed time between ticks and credits
 
 ## Tech
 
-Swift, SwiftUI, and AppKit. SQLite via the system library (no third-party dependencies). `MenuBarExtra` for the menu bar surface, Apple Events for browser URLs, and `SMAppService` for launch at login.
+Swift, SwiftUI, and AppKit. SQLite via the system library (no third-party dependencies). `MenuBarExtra` for the menu bar surface, Apple Events for browser URLs, and `SMAppService` for launch at login. Focus Guard's blur is a non-activating `NSPanel` at `CGShieldingWindowLevel()` with a native `NSVisualEffectView`, so it covers the menu bar and fullscreen apps without stealing focus.
 
 ```
 MacTrack/
   App/        entry point and lifecycle
-  Models/     usage records, categories, productivity tags, chart data
-  Services/   sampler, browser reader, idle detector, blocks, system-extension control, store, database, icons
-  Design/     theme tokens, glass, formatters
+  Models/     usage records, categories, productivity tags, chart data, quote bank
+  Services/   sampler, browser reader, idle detector, blocks, system-extension control,
+              store, database, icons, Focus Guard + blur overlay
+  Design/     theme tokens, glass, formatters, bundled-font loader
+  Resources/  app entitlements, bundled fonts
   Views/      popover, header, list, chart, productivity donut, settings
 NetworkFilter/  the system-level content-filter extension (see SETUP_BLOCKING.md)
 ```
+
+The quote card is set in **Newsreader** and **Inter**, bundled as variable fonts under the SIL Open Font License (see `MacTrack/Resources/Fonts/OFL.txt`).
 
 ## License
 
