@@ -25,13 +25,17 @@ final class AppModel: ObservableObject {
         self.monitor = ActivityMonitor(store: store, blocks: blocks, focusGuard: focusGuard)
         self.loginItem = LoginItem()
 
-        monitor.start()
+        // Dev-only: with MACTRACK_TEST_BLUR set to a style id, fire that blur a
+        // moment after launch so the overlay can be previewed/screenshotted. In
+        // this mode the sampler is NOT started, so this throwaway instance never
+        // tracks or writes — it can't disturb a real running copy. No effect
+        // otherwise.
+        let testStyle = ProcessInfo.processInfo.environment["MACTRACK_TEST_BLUR"]
+            .flatMap { QuoteCardStyle(rawValue: $0) }
 
-        // Dev-only: with MACTRACK_TEST_BLUR set to a style id (light/stately/
-        // literary), fire that blur a moment after launch so the overlay can be
-        // previewed/screenshotted without driving the menu UI. No effect otherwise.
-        if let raw = ProcessInfo.processInfo.environment["MACTRACK_TEST_BLUR"],
-           let style = QuoteCardStyle(rawValue: raw) {
+        if testStyle == nil { monitor.start() }
+
+        if let style = testStyle {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [focusGuard] in
                 focusGuard.test(style)
             }

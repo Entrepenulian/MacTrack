@@ -1,28 +1,29 @@
 import AppKit
 import SwiftUI
 
-/// The three quote-card looks the user can preview and choose between. All three
-/// are text-only and monochrome; they differ in typeface pairing and weight.
+/// The quote card is fixed (the "Light" look: a Newsreader serif quote in white).
+/// These three cases change ONLY how the author's name is set beneath it, so the
+/// user can compare attribution treatments.
 enum QuoteCardStyle: String, CaseIterable, Identifiable {
-    case light       // Newsreader serif + Inter — clean editorial
-    case stately     // Fraunces serif + Inter — warm, larger, commanding
-    case literary    // Literata italic + Inter — book-letter feel
+    case italic       // "— Naval Ravikant" in serif italic, a printed signoff
+    case smallcaps    // "Naval Ravikant" in true serif small caps
+    case roman        // "Naval Ravikant" in quiet roman serif, title case
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .light:    return "Light"
-        case .stately:  return "Stately"
-        case .literary: return "Literary"
+        case .italic:    return "Italic"
+        case .smallcaps: return "Small Caps"
+        case .roman:     return "Roman"
         }
     }
 
     var blurb: String {
         switch self {
-        case .light:    return "Newsreader · clean editorial"
-        case .stately:  return "Fraunces · warm & bold"
-        case .literary: return "Literata italic · book letter"
+        case .italic:    return "Serif italic with an em-dash"
+        case .smallcaps: return "Elegant serif small caps"
+        case .roman:     return "Quiet roman, title case"
         }
     }
 }
@@ -105,43 +106,36 @@ final class NudgeOverlayController {
     }
 }
 
-// MARK: - Per-style typography
+// MARK: - Author treatment per style
 
-private struct CardSpec {
-    var qFamily: String; var qWeight: CGFloat; var qItalic: Bool; var qSize: CGFloat
-    var qWordSpacing: CGFloat; var qLineSpacing: CGFloat; var qMaxFactor: CGFloat; var qMaxCap: CGFloat
-    var nFamily: String; var nWeight: CGFloat; var nSize: CGFloat; var nTracking: CGFloat
-    var nUpper: Bool; var nItalic: Bool; var nTopPad: CGFloat
-    var rFamily: String; var rWeight: CGFloat; var rSize: CGFloat; var rTracking: CGFloat
-    var rUpper: Bool; var rItalic: Bool
+private struct AuthorSpec {
+    var weight: CGFloat
+    var size: CGFloat
+    var italic: Bool
+    var smallCaps: Bool
+    var tracking: CGFloat
+    var dash: Bool
+    var topPad: CGFloat
+    var opacity: Double
 }
 
 private extension QuoteCardStyle {
-    var spec: CardSpec {
+    var author: AuthorSpec {
         switch self {
-        case .light:
-            return CardSpec(
-                qFamily: "Newsreader", qWeight: 460, qItalic: false, qSize: 54,
-                qWordSpacing: 16, qLineSpacing: 12, qMaxFactor: 0.88, qMaxCap: 1240,
-                nFamily: "Inter", nWeight: 600, nSize: 13, nTracking: 3.5, nUpper: true, nItalic: false, nTopPad: 46,
-                rFamily: "Inter", rWeight: 500, rSize: 13, rTracking: 0.2, rUpper: false, rItalic: false)
-        case .stately:
-            return CardSpec(
-                qFamily: "Fraunces", qWeight: 600, qItalic: false, qSize: 60,
-                qWordSpacing: 17, qLineSpacing: 6, qMaxFactor: 0.9, qMaxCap: 1320,
-                nFamily: "Inter", nWeight: 600, nSize: 14, nTracking: 4, nUpper: true, nItalic: false, nTopPad: 46,
-                rFamily: "Inter", rWeight: 600, rSize: 12, rTracking: 3, rUpper: true, rItalic: false)
-        case .literary:
-            return CardSpec(
-                qFamily: "Literata", qWeight: 500, qItalic: true, qSize: 51,
-                qWordSpacing: 15, qLineSpacing: 8, qMaxFactor: 0.88, qMaxCap: 1240,
-                nFamily: "Inter", nWeight: 600, nSize: 13, nTracking: 4, nUpper: true, nItalic: false, nTopPad: 48,
-                rFamily: "Literata", rWeight: 500, rSize: 18, rTracking: 0, rUpper: false, rItalic: true)
+        case .italic:
+            return AuthorSpec(weight: 470, size: 25, italic: true, smallCaps: false,
+                              tracking: 0.3, dash: true, topPad: 40, opacity: 0.62)
+        case .smallcaps:
+            return AuthorSpec(weight: 560, size: 19, italic: false, smallCaps: true,
+                              tracking: 2.4, dash: false, topPad: 46, opacity: 0.62)
+        case .roman:
+            return AuthorSpec(weight: 500, size: 23, italic: false, smallCaps: false,
+                              tracking: 0.4, dash: false, topPad: 44, opacity: 0.55)
         }
     }
 }
 
-// MARK: - The card
+// MARK: - The card (fixed "Light" quote; author varies by style)
 
 private struct NudgeOverlayView: View {
     let quote: Quote
@@ -153,25 +147,29 @@ private struct NudgeOverlayView: View {
 
     private let base = 0.55
     private let stagger = 0.075
-    private let wordDur = 0.64
+    private let wordDur = 0.66
 
     private var words: [String] { quote.text.split(separator: " ").map(String.init) }
     private var tailStart: Double { base + Double(words.count) * stagger }
 
+    // The serif used everywhere on the card.
+    private let serif = "Newsreader"
+
     var body: some View {
-        let s = style.spec
+        let a = style.author
         GeometryReader { geo in
             ZStack {
                 RadialGradient(
-                    colors: [.black.opacity(0.52), .black.opacity(0.17), .clear],
-                    center: .center, startRadius: 30, endRadius: max(geo.size.width, geo.size.height)
+                    colors: [.black.opacity(0.5), .black.opacity(0.16), .clear],
+                    center: .center, startRadius: 40, endRadius: max(geo.size.width, geo.size.height)
                 )
                 .ignoresSafeArea()
                 .opacity(revealed ? 1 : 0)
                 .animation(.easeOut(duration: 0.7), value: revealed)
 
                 VStack(spacing: 0) {
-                    FlowLayout(spacing: s.qWordSpacing, lineSpacing: s.qLineSpacing) {
+                    // Fixed quote: Newsreader, light, short quotes stay on one line.
+                    FlowLayout(spacing: 16, lineSpacing: 12) {
                         ForEach(Array(words.enumerated()), id: \.offset) { i, word in
                             Text(word)
                                 .modifier(WordReveal(revealed: revealed,
@@ -179,19 +177,16 @@ private struct NudgeOverlayView: View {
                                                      duration: wordDur))
                         }
                     }
-                    .font(AppFont.custom(s.qFamily, s.qSize, weight: s.qWeight, italic: s.qItalic))
+                    .font(AppFont.custom(serif, 54, weight: 460))
                     .foregroundStyle(.white)
                     .shadow(color: .black.opacity(0.28), radius: 26, y: 6)
-                    .frame(maxWidth: min(geo.size.width * s.qMaxFactor, s.qMaxCap))
+                    .frame(maxWidth: min(geo.size.width * 0.88, 1240))
 
-                    Text(s.nUpper ? quote.author.uppercased() : quote.author)
-                        .font(AppFont.custom(s.nFamily, s.nSize, weight: s.nWeight, italic: s.nItalic))
-                        .tracking(s.nTracking)
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.top, s.nTopPad)
-                        .riseIn(revealed, delay: tailStart + 0.16, duration: 0.7)
+                    authorView(a)
+                        .padding(.top, a.topPad)
+                        .riseIn(revealed, delay: tailStart + 0.18, duration: 0.75)
 
-                    ResumeText(spec: s, action: onDismiss)
+                    ResumeText(action: onDismiss)
                         .opacity(exitShown ? 1 : 0)
                         .offset(y: exitShown ? 0 : 8)
                         .allowsHitTesting(exitShown)
@@ -206,22 +201,55 @@ private struct NudgeOverlayView: View {
         .onTapGesture { if !exitShown { exitShown = true } }
         .onAppear { revealed = true }
     }
+
+    /// The name plus a small partner mark, composed differently per style so the
+    /// attribution reads as a designed unit rather than a bare line of text.
+    private func authorView(_ a: AuthorSpec) -> some View {
+        let baseFont = AppFont.custom(serif, a.size, weight: a.weight, italic: a.italic)
+        let font = a.smallCaps ? baseFont.smallCaps() : baseFont
+        let name = Text(quote.author)
+            .font(font)
+            .tracking(a.tracking)
+            .foregroundStyle(.white.opacity(a.opacity))
+        let mark = Color.white.opacity(0.3)
+
+        return Group {
+            switch style {
+            case .italic:
+                // A short hairline rule sits above the italic signoff.
+                VStack(spacing: 18) {
+                    Rectangle().fill(mark).frame(width: 34, height: 1)
+                    name
+                }
+            case .smallcaps:
+                // Hairline rules flank the small-caps name on either side.
+                HStack(spacing: 18) {
+                    Rectangle().fill(mark).frame(width: 28, height: 1)
+                    name
+                    Rectangle().fill(mark).frame(width: 28, height: 1)
+                }
+            case .roman:
+                // A small diamond centres above the roman name.
+                VStack(spacing: 15) {
+                    Rectangle().fill(mark).frame(width: 5, height: 5).rotationEffect(.degrees(45))
+                    name
+                }
+            }
+        }
+    }
 }
 
-// MARK: - Resume text (plain, no underline; appears after one click)
+// MARK: - Resume text (plain; appears after one click)
 
 private struct ResumeText: View {
-    let spec: CardSpec
     let action: () -> Void
     @State private var hovering = false
 
-    private let label = "I'll get back to it"
-
     var body: some View {
-        Text(spec.rUpper ? label.uppercased() : label)
-            .font(AppFont.custom(spec.rFamily, spec.rSize, weight: spec.rWeight, italic: spec.rItalic))
-            .tracking(spec.rTracking)
-            .foregroundStyle(.white.opacity(hovering ? 0.92 : 0.48))
+        Text("I'll get back to it")
+            .font(AppFont.custom("Inter", 13, weight: 500))
+            .tracking(0.2)
+            .foregroundStyle(.white.opacity(hovering ? 0.9 : 0.48))
             .padding(8)
             .contentShape(Rectangle())
             .onHover { hovering = $0 }

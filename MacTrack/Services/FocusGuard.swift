@@ -35,9 +35,9 @@ final class FocusGuard: ObservableObject {
         UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? false
     }
 
-    /// The look used by a real nudge (chosen in Settings; defaults to Light).
+    /// The author treatment used by a real nudge (chosen in Settings).
     private var activeStyle: QuoteCardStyle {
-        QuoteCardStyle(rawValue: UserDefaults.standard.string(forKey: Self.styleKey) ?? "") ?? .light
+        QuoteCardStyle(rawValue: UserDefaults.standard.string(forKey: Self.styleKey) ?? "") ?? .italic
     }
 
     private var thresholdSeconds: TimeInterval {
