@@ -207,7 +207,9 @@ private struct NudgeOverlayView: View {
     private func authorView(_ a: AuthorSpec) -> some View {
         let baseFont = AppFont.custom(serif, a.size, weight: a.weight, italic: a.italic)
         let font = a.smallCaps ? baseFont.smallCaps() : baseFont
-        let name = Text(quote.author)
+        // The italic signoff leads with an em-dash, like a printed citation.
+        let displayName = style == .italic ? "\u{2014}\u{2009}\(quote.author)" : quote.author
+        let name = Text(displayName)
             .font(font)
             .tracking(a.tracking)
             .foregroundStyle(.white.opacity(a.opacity))
@@ -216,11 +218,8 @@ private struct NudgeOverlayView: View {
         return Group {
             switch style {
             case .italic:
-                // A short hairline rule sits above the italic signoff.
-                VStack(spacing: 18) {
-                    Rectangle().fill(mark).frame(width: 34, height: 1)
-                    name
-                }
+                // The em-dash on the name is its partner mark.
+                name
             case .smallcaps:
                 // Hairline rules flank the small-caps name on either side.
                 HStack(spacing: 18) {
