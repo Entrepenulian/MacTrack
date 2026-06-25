@@ -54,6 +54,16 @@ Need to lock yourself out of something? Right-click any app or site, choose **Bl
 
 That app-side layer can be dodged by force-quitting MacTrack. For a bulletproof, system-wide block — a signed **Network Extension** content filter, DoH-proof and enforced by macOS itself even when MacTrack isn't running — see **[SETUP_BLOCKING.md](SETUP_BLOCKING.md)**. It needs your own Apple Developer signing, so it ships as code plus a step-by-step guide.
 
+## Focus Guard
+
+Blocking is the hard stop. Focus Guard is the gentle one. Switch it on, and once you've spent an unbroken stretch — the threshold is yours, from 5 minutes to an hour — on anything tagged **unproductive**, MacTrack frosts the entire screen and shows a single quote, centred, in a serif card that reveals itself one word at a time. It's a nudge, not a jail: the blur lifts on its own the instant you move to something else, and the way back to work sits quietly at the bottom of the screen, appearing only after you stop and click once.
+
+The quotes come from collections you choose in settings — Stoic discipline (Seneca, Epictetus, Marcus Aurelius), leaders and conquerors (Caesar, Napoleon, Sun Tzu), business and money, daily motivation, Naval Ravikant, and more — so the voice doing the nudging is one you actually respect. The card is set in Newsreader with the author as an italic em-dash signoff; short quotes stay on one line.
+
+<p align="center">
+  <img src="docs/focus-guard.png" width="520" alt="Focus Guard: a frosted screen with a centred quote" />
+</p>
+
 ## Privacy
 
 - **Local-first.** Your history lives in a SQLite database at `~/Library/Application Support/MacTrack/`. It is never uploaded anywhere.
