@@ -27,12 +27,13 @@ final class AppModel: ObservableObject {
 
         monitor.start()
 
-        // Dev-only: with MACTRACK_TEST_BLUR=1 set, fire the Focus Guard blur a
-        // moment after launch so the overlay design can be previewed/screenshotted
-        // without driving the menu UI. No effect for normal users.
-        if ProcessInfo.processInfo.environment["MACTRACK_TEST_BLUR"] == "1" {
+        // Dev-only: with MACTRACK_TEST_BLUR set to a style id (light/stately/
+        // literary), fire that blur a moment after launch so the overlay can be
+        // previewed/screenshotted without driving the menu UI. No effect otherwise.
+        if let raw = ProcessInfo.processInfo.environment["MACTRACK_TEST_BLUR"],
+           let style = QuoteCardStyle(rawValue: raw) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [focusGuard] in
-                focusGuard.test()
+                focusGuard.test(style)
             }
         }
 

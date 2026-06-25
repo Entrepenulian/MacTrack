@@ -34,7 +34,6 @@ struct SettingsView: View {
     }
 
     private var selectedCount: Int { sourceBindings.filter { $0.1.wrappedValue }.count }
-    private var canTest: Bool { fgEnabled && selectedCount > 0 }
 
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
@@ -187,12 +186,16 @@ struct SettingsView: View {
 
                     rowDivider
 
-                    // Fire it now with a random quote from the selection.
-                    row {
-                        labelBlock("Preview", "Show the blur with a random quote you've selected")
-                        Spacer(minLength: Theme.Space.sm)
-                        TestButton(enabled: canTest) { focusGuard.test() }
+                    // Preview each look with a random quote from the selection.
+                    VStack(alignment: .leading, spacing: 10) {
+                        labelBlock("Preview a style", "Play the blur to compare the three looks")
+                        HStack(spacing: 8) {
+                            ForEach(QuoteCardStyle.allCases) { style in
+                                TestButton(title: style.title) { focusGuard.test(style) }
+                            }
+                        }
                     }
+                    .padding(.horizontal, 14).padding(.vertical, 12)
                 }
             }
             .animation(.easeInOut(duration: 0.28), value: fgEnabled)
@@ -429,37 +432,33 @@ private struct Checkbox: View {
     }
 }
 
-/// The Test trigger. A quiet accent pill that fills on hover and presses in on
-/// click; dims and stops responding when nothing's selected.
+/// A per-style preview trigger. A quiet accent pill that fills on hover and
+/// presses in on click. One per quote-card style.
 private struct TestButton: View {
-    let enabled: Bool
+    let title: String
     let action: () -> Void
     @State private var hovering = false
     @State private var pressed = false
 
-    private var active: Bool { enabled && hovering }
-
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "eye")
-                .font(.system(size: 11, weight: .semibold))
-            Text("Test the blur").font(.rowValue)
+        HStack(spacing: 5) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 9, weight: .semibold))
+            Text(title).font(.rowValue)
         }
-        .foregroundStyle(enabled ? (active ? Color.white : Theme.settingsAccent) : Theme.Ink.faint)
+        .foregroundStyle(hovering ? Color.white : Theme.settingsAccent)
         .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(
-            Capsule().fill(active ? Theme.settingsAccent
-                                  : Theme.settingsAccent.opacity(enabled ? 0.12 : 0.05))
-        )
-        .overlay(Capsule().strokeBorder(Theme.settingsAccent.opacity(enabled ? 0.3 : 0.12)))
+        .frame(maxWidth: .infinity)
+        .background(Capsule().fill(hovering ? Theme.settingsAccent : Theme.settingsAccent.opacity(0.12)))
+        .overlay(Capsule().strokeBorder(Theme.settingsAccent.opacity(0.3)))
         .scaleEffect(pressed ? 0.96 : 1)
         .frame(minHeight: 40)
         .contentShape(Capsule())
-        .onHover { if enabled { hovering = $0 } else { hovering = false } }
-        .onTapGesture { if enabled { action() } }
+        .onHover { hovering = $0 }
+        .onTapGesture { action() }
         .gesture(
             DragGesture(minimumDistance: 0)
-                .onChanged { _ in if enabled { pressed = true } }
+                .onChanged { _ in pressed = true }
                 .onEnded { _ in pressed = false }
         )
         .animation(.easeOut(duration: 0.16), value: hovering)

@@ -1,13 +1,9 @@
 import SwiftUI
 import CoreText
 
-/// Bundled-font access. The Focus Guard quote is set in Cormorant Garamond, a
-/// classic high-contrast garalde that reads like a printed epigraph rather than
-/// a system label.
-///
-/// The file ships as a single variable font that defaults to Light, so we drive
-/// the `wght` axis ourselves to pull real SemiBold weight out of it instead of
-/// getting the thin default.
+/// Bundled-font access for the Focus Guard quote card. Fonts ship as variable
+/// TTFs, so we drive the `wght` axis ourselves to get the exact weight rather
+/// than the file's default instance.
 enum AppFont {
 
     private static var didRegister = false
@@ -27,18 +23,17 @@ enum AppFont {
 
     private static let wghtAxis = 0x77676874   // 'wght'
 
-    /// Cormorant Garamond at an explicit optical weight (300–700), optionally
-    /// italic. Built straight from the variable font so the weight is honoured.
-    static func cormorant(_ size: CGFloat, weight: CGFloat = 600, italic: Bool = false) -> Font {
+    /// Any registered family at an explicit weight, optionally italic. Weight is
+    /// applied through the variable font's `wght` axis so it's honoured exactly.
+    static func custom(_ family: String, _ size: CGFloat, weight: CGFloat = 400, italic: Bool = false) -> Font {
         var attrs: [CFString: Any] = [
-            kCTFontFamilyNameAttribute: "Cormorant Garamond",
+            kCTFontFamilyNameAttribute: family,
             kCTFontVariationAttribute: [wghtAxis: weight],
         ]
         if italic {
             attrs[kCTFontTraitsAttribute] = [kCTFontSymbolicTrait: CTFontSymbolicTraits.traitItalic.rawValue]
         }
         let desc = CTFontDescriptorCreateWithAttributes(attrs as CFDictionary)
-        let ct = CTFontCreateWithFontDescriptor(desc, size, nil)
-        return Font(ct)
+        return Font(CTFontCreateWithFontDescriptor(desc, size, nil))
     }
 }
