@@ -23,6 +23,7 @@ Most time trackers are heavy, paid, and want your data. MacTrack is the opposite
 - **A history you can scrub.** A GitHub-style activity grid colors each past day by what dominated it — productive, unproductive, or other. Click any day to rewind the whole popover — donut, ranked list, and chart — to that day's data.
 - **Block distractions.** Right-click anything and block it for 15 minutes to 2 hours. While a block is live there is no off switch — a locked countdown, plus app-hiding and tab-bouncing, keeps you out until it expires. An optional **system-level filter** (a signed Network Extension) makes it DoH-proof and keeps working even if you quit MacTrack — see [SETUP_BLOCKING.md](SETUP_BLOCKING.md).
 - **Good-night mode.** One tap stops tracking for the night and auto-resumes at the wake time you set, so late-night idle never skews your day.
+- **Focus Guard.** Linger too long on something you've tagged unproductive and MacTrack frosts the whole screen with a quote — a line of discipline from Stoics, conquerors, founders, and investors — set in a serif card that writes itself in word by word. It clears the moment you switch away; a quiet link to get back to work waits at the bottom and only appears once you pause and click. Pick which quote collections feed it and how long "too long" is in settings.
 
 ## Focus & productivity
 
