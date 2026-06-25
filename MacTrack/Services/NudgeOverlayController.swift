@@ -133,13 +133,18 @@ private struct NudgeOverlayView: View {
                         .foregroundStyle(.white.opacity(0.62))
                         .padding(.top, 40)
                         .riseIn(revealed, delay: tailStart + 0.18, duration: 0.75)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
 
+                // The link sits low on the screen, centred, and only after a click.
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
                     ResumeText(action: onDismiss)
                         .opacity(exitShown ? 1 : 0)
                         .offset(y: exitShown ? 0 : 8)
                         .allowsHitTesting(exitShown)
                         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.55), value: exitShown)
-                        .padding(.top, 58)
+                        .padding(.bottom, 40)
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
             }
