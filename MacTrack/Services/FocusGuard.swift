@@ -29,15 +29,9 @@ final class FocusGuard: ObservableObject {
 
     static let enabledKey = "focusGuard.enabled"
     static let thresholdMinutesKey = "focusGuard.thresholdMinutes"
-    static let styleKey = "focusGuard.cardStyle"
 
     private var enabled: Bool {
         UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? false
-    }
-
-    /// The author treatment used by a real nudge (chosen in Settings).
-    private var activeStyle: QuoteCardStyle {
-        QuoteCardStyle(rawValue: UserDefaults.standard.string(forKey: Self.styleKey) ?? "") ?? .italic
     }
 
     private var thresholdSeconds: TimeInterval {
@@ -71,7 +65,7 @@ final class FocusGuard: ObservableObject {
         if tag == .unproductive {
             streak += delta
             if streak >= thresholdSeconds, !overlay.isShowing, let quote = pick() {
-                overlay.show(quote: quote, style: activeStyle)
+                overlay.show(quote: quote)
             }
         } else {
             streak = 0
@@ -79,14 +73,13 @@ final class FocusGuard: ObservableObject {
         }
     }
 
-    /// Fire the blur now in a specific style to preview it. Used by the Settings
-    /// per-style Test buttons. Falls back to all sources if none are selected so
-    /// a preview always shows something.
-    func test(_ style: QuoteCardStyle) {
+    /// Fire the blur now to preview it. Used by the Settings Test button. Falls
+    /// back to all sources if none are selected so a preview always shows.
+    func test() {
         let sources = enabledSources.isEmpty ? QuoteSource.allCases : enabledSources
         guard let quote = QuoteBank.next(from: sources) else { return }
         isTest = true
-        overlay.show(quote: quote, style: style)
+        overlay.show(quote: quote)
     }
 
     private func pick() -> Quote? { QuoteBank.next(from: enabledSources) }

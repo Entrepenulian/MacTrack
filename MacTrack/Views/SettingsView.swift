@@ -186,16 +186,12 @@ struct SettingsView: View {
 
                     rowDivider
 
-                    // Preview each look with a random quote from the selection.
-                    VStack(alignment: .leading, spacing: 10) {
-                        labelBlock("Preview a style", "Play the blur to compare the three looks")
-                        HStack(spacing: 8) {
-                            ForEach(QuoteCardStyle.allCases) { style in
-                                TestButton(title: style.title) { focusGuard.test(style) }
-                            }
-                        }
+                    // Preview the blur with a random quote from the selection.
+                    row {
+                        labelBlock("Preview", "Play the blur with a random quote you've selected")
+                        Spacer(minLength: Theme.Space.sm)
+                        TestButton(title: "Test") { focusGuard.test() }
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 12)
                 }
             }
             .animation(.easeInOut(duration: 0.28), value: fgEnabled)
@@ -432,8 +428,8 @@ private struct Checkbox: View {
     }
 }
 
-/// A per-style preview trigger. A quiet accent pill that fills on hover and
-/// presses in on click. One per quote-card style.
+/// The preview trigger. A quiet accent pill that fills on hover and presses in
+/// on click.
 private struct TestButton: View {
     let title: String
     let action: () -> Void
@@ -447,8 +443,7 @@ private struct TestButton: View {
             Text(title).font(.rowValue)
         }
         .foregroundStyle(hovering ? Color.white : Theme.settingsAccent)
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16).padding(.vertical, 8)
         .background(Capsule().fill(hovering ? Theme.settingsAccent : Theme.settingsAccent.opacity(0.12)))
         .overlay(Capsule().strokeBorder(Theme.settingsAccent.opacity(0.3)))
         .scaleEffect(pressed ? 0.96 : 1)
