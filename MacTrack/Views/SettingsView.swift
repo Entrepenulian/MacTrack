@@ -6,11 +6,35 @@ struct SettingsView: View {
     @EnvironmentObject var monitor: ActivityMonitor
     @EnvironmentObject var loginItem: LoginItem
     @EnvironmentObject var filter: BlockFilterManager
+    @EnvironmentObject var focusGuard: FocusGuard
     @AppStorage("idleThreshold") private var idleThreshold: Double = 120
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
     @AppStorage("chartEndHour") private var chartEndHour: Int = 22
     @AppStorage("wakeHour") private var wakeHour: Int = 8
+
+    // Focus Guard: the smart quote blur.
+    @AppStorage("focusGuard.enabled") private var fgEnabled = false
+    @AppStorage("focusGuard.thresholdMinutes") private var fgThreshold: Double = 20
+    @AppStorage("focusGuard.source.wikiquote") private var srcWikiquote = true
+    @AppStorage("focusGuard.source.stoic") private var srcStoic = true
+    @AppStorage("focusGuard.source.dwyl") private var srcDwyl = true
+    @AppStorage("focusGuard.source.entrepreneur") private var srcEntrepreneur = true
+    @AppStorage("focusGuard.source.motivation") private var srcMotivation = true
+    @AppStorage("focusGuard.source.tate") private var srcTate = true
+    @AppStorage("focusGuard.source.naval") private var srcNaval = true
+
     var onBack: () -> Void
+
+    /// Pairs each source with its persisted toggle so the list and the Test
+    /// button's enabled state both react to a change here.
+    private var sourceBindings: [(QuoteSource, Binding<Bool>)] {
+        [(.wikiquote, $srcWikiquote), (.stoic, $srcStoic), (.dwyl, $srcDwyl),
+         (.entrepreneur, $srcEntrepreneur), (.motivation, $srcMotivation),
+         (.tate, $srcTate), (.naval, $srcNaval)]
+    }
+
+    private var selectedCount: Int { sourceBindings.filter { $0.1.wrappedValue }.count }
+    private var canTest: Bool { fgEnabled && selectedCount > 0 }
 
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
@@ -58,6 +82,8 @@ struct SettingsView: View {
                     stepperRow("Wake time", value: $wakeHour, range: 0...23)
                 }
             }
+
+            focusGuardSection
 
             section("Chart range") {
                 card {
@@ -111,6 +137,66 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
         }
         .onAppear { loginItem.refresh(); filter.refresh() }
+    }
+
+    // MARK: Focus Guard
+
+    private var focusGuardSection: some View {
+        section("Focus Guard") {
+            card {
+                // Master switch.
+                row {
+                    labelBlock("Smart quote reminders",
+                               "Blur the screen with a quote when you linger on unproductive apps")
+                    Spacer(minLength: Theme.Space.sm)
+                    Toggle("", isOn: $fgEnabled.animation(.easeInOut(duration: 0.28)))
+                        .labelsHidden().toggleStyle(.switch).tint(Theme.settingsAccent)
+                }
+
+                if fgEnabled {
+                    rowDivider
+
+                    // How long is "too long".
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack {
+                            Text("Nudge after").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                            Spacer()
+                            Text("\(Int(fgThreshold)) min")
+                                .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
+                        }
+                        PremiumSlider(value: $fgThreshold, range: 5...60, step: 5, accent: Theme.settingsAccent)
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 11)
+
+                    rowDivider
+
+                    HStack {
+                        Text("Quote sources").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                        Spacer()
+                        Text("\(selectedCount) of \(sourceBindings.count)")
+                            .font(.rowMeta.monospacedDigit()).foregroundStyle(Theme.Ink.tertiary)
+                    }
+                    .padding(.horizontal, 14).padding(.top, 11).padding(.bottom, 4)
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(sourceBindings.enumerated()), id: \.element.0) { idx, pair in
+                            if idx > 0 { rowDivider.padding(.leading, 54) }
+                            SourceRow(source: pair.0, isOn: pair.1, accent: Theme.settingsAccent)
+                        }
+                    }
+
+                    rowDivider
+
+                    // Fire it now with a random quote from the selection.
+                    row {
+                        labelBlock("Preview", "Show the blur with a random quote you've selected")
+                        Spacer(minLength: Theme.Space.sm)
+                        TestButton(enabled: canTest) { focusGuard.test() }
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.28), value: fgEnabled)
+        }
     }
 
     // MARK: Header
@@ -276,5 +362,107 @@ private struct PremiumSlider: View {
             )
         }
         .frame(height: trackHeight)
+    }
+}
+
+// MARK: - Focus Guard rows
+
+/// One quote collection in the Focus Guard list: an icon chip, its name and
+/// credit, and a checkbox. The whole row is the hit target, and the icon picks
+/// up the accent when the source is on so the checked state reads at a glance.
+private struct SourceRow: View {
+    let source: QuoteSource
+    @Binding var isOn: Bool
+    let accent: Color
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: source.symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(isOn ? accent : Theme.Ink.tertiary)
+                .frame(width: 30, height: 30)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(isOn ? accent.opacity(0.12) : Theme.fill(2))
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(source.title).font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                Text(source.subtitle).font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
+                    .lineLimit(1).truncationMode(.tail)
+            }
+
+            Spacer(minLength: Theme.Space.sm)
+
+            Checkbox(isOn: isOn, accent: accent)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .frame(minHeight: 46)
+        .background(hovering ? Theme.fill(2).opacity(0.55) : Color.clear)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .onTapGesture { withAnimation(.easeOut(duration: 0.2)) { isOn.toggle() } }
+    }
+}
+
+/// A rounded-square checkbox. The tick scales and fades in from small (0.25 ->
+/// 1) so toggling has a little life, matching the rest of the panel's restraint.
+private struct Checkbox: View {
+    let isOn: Bool
+    let accent: Color
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(isOn ? accent : Color.clear)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(isOn ? accent : Theme.Ink.faint, lineWidth: 1.5)
+            if isOn {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .transition(.scale(scale: 0.25).combined(with: .opacity))
+            }
+        }
+        .frame(width: 20, height: 20)
+    }
+}
+
+/// The Test trigger. A quiet accent pill that fills on hover and presses in on
+/// click; dims and stops responding when nothing's selected.
+private struct TestButton: View {
+    let enabled: Bool
+    let action: () -> Void
+    @State private var hovering = false
+    @State private var pressed = false
+
+    private var active: Bool { enabled && hovering }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "eye")
+                .font(.system(size: 11, weight: .semibold))
+            Text("Test the blur").font(.rowValue)
+        }
+        .foregroundStyle(enabled ? (active ? Color.white : Theme.settingsAccent) : Theme.Ink.faint)
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(
+            Capsule().fill(active ? Theme.settingsAccent
+                                  : Theme.settingsAccent.opacity(enabled ? 0.12 : 0.05))
+        )
+        .overlay(Capsule().strokeBorder(Theme.settingsAccent.opacity(enabled ? 0.3 : 0.12)))
+        .scaleEffect(pressed ? 0.96 : 1)
+        .frame(minHeight: 40)
+        .contentShape(Capsule())
+        .onHover { if enabled { hovering = $0 } else { hovering = false } }
+        .onTapGesture { if enabled { action() } }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in if enabled { pressed = true } }
+                .onEnded { _ in pressed = false }
+        )
+        .animation(.easeOut(duration: 0.16), value: hovering)
+        .animation(.easeOut(duration: 0.12), value: pressed)
     }
 }

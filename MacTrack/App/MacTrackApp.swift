@@ -8,20 +8,33 @@ import SwiftUI
 final class AppModel: ObservableObject {
     let store: UsageStore
     let blocks: BlockController
+    let focusGuard: FocusGuard
     let monitor: ActivityMonitor
     let loginItem: LoginItem
     let filter = BlockFilterManager()
 
     init() {
+        AppFont.registerBundledFonts()
         let database = try? DatabaseStore()        // one shared connection
         let store = UsageStore(database: database)
         self.store = store
         let blocks = BlockController(db: database)
         self.blocks = blocks
-        self.monitor = ActivityMonitor(store: store, blocks: blocks)
+        let focusGuard = FocusGuard()
+        self.focusGuard = focusGuard
+        self.monitor = ActivityMonitor(store: store, blocks: blocks, focusGuard: focusGuard)
         self.loginItem = LoginItem()
 
         monitor.start()
+
+        // Dev-only: with MACTRACK_TEST_BLUR=1 set, fire the Focus Guard blur a
+        // moment after launch so the overlay design can be previewed/screenshotted
+        // without driving the menu UI. No effect for normal users.
+        if ProcessInfo.processInfo.environment["MACTRACK_TEST_BLUR"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [focusGuard] in
+                focusGuard.test()
+            }
+        }
 
         NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
@@ -46,6 +59,7 @@ struct MacTrackApp: App {
                 .environmentObject(model.loginItem)
                 .environmentObject(model.blocks)
                 .environmentObject(model.filter)
+                .environmentObject(model.focusGuard)
         } label: {
             MenuBarLabel()
                 .environmentObject(model.store)

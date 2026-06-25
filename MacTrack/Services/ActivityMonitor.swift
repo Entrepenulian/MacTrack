@@ -20,6 +20,7 @@ final class ActivityMonitor: ObservableObject {
 
     private let store: UsageStore
     private let blocks: BlockController
+    private let focusGuard: FocusGuard
     private let idle = IdleDetector()
     private let browserReader = BrowserURLReader()
 
@@ -48,9 +49,10 @@ final class ActivityMonitor: ObservableObject {
 
     var automationDenied: Bool { browserReader.automationDenied }
 
-    init(store: UsageStore, blocks: BlockController) {
+    init(store: UsageStore, blocks: BlockController, focusGuard: FocusGuard) {
         self.store = store
         self.blocks = blocks
+        self.focusGuard = focusGuard
         if let ts = UserDefaults.standard.object(forKey: sleepKey) as? Double {
             let until = Date(timeIntervalSince1970: ts)
             if until > Date() { sleepUntilDate = until; isSleeping = true }
@@ -220,6 +222,12 @@ final class ActivityMonitor: ObservableObject {
         } else {
             currentDomain = nil
         }
+
+        // Feed the focus guard the tag of whatever's in focus (the site if we're
+        // on one, otherwise the app) and the time just credited. It owns the
+        // "too long on unproductive stuff → blur + quote" decision.
+        let tag = currentDomain.flatMap { store.siteTag($0) } ?? store.appTag(bundleID)
+        focusGuard.evaluate(tag: tag, delta: delta)
     }
 
     /// Keep the "now tracking" line truthful even while idle/paused.
