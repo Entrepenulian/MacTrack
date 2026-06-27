@@ -13,6 +13,7 @@ struct UsageRow: View, Equatable {
     var onBlock: (Int) -> Void = { _ in }
     var onTag: (ProductivityTag?) -> Void = { _ in }
     var onExclude: () -> Void = {}
+    var onOpen: () -> Void = {}
 
     @State private var hovering = false
 
@@ -72,6 +73,8 @@ struct UsageRow: View, Equatable {
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
         .onHover { h in withAnimation(.calm) { hovering = h } }
+        .onTapGesture { onOpen() }
+        .pointerStyle(.link)
         .contextMenu {
             Menu {
                 Button("15 minutes") { onBlock(15) }

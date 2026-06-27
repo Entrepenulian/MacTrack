@@ -7,6 +7,7 @@ struct UsageListView: View {
     @EnvironmentObject var blocks: BlockController
     let entries: [UsageEntry]
     var maxItems: Int = 10
+    var onSelect: (UsageEntry) -> Void = { _ in }
 
     @State private var appeared = false
 
@@ -19,7 +20,8 @@ struct UsageListView: View {
                          currentTag: currentTag(entry),
                          onBlock: { startBlock(entry, $0) },
                          onTag: { applyTag(entry, $0) },
-                         onExclude: { dontTrack(entry) })
+                         onExclude: { dontTrack(entry) },
+                         onOpen: { onSelect(entry) })
                     .equatable()
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 6)
