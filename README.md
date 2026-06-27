@@ -14,9 +14,11 @@ Most time trackers are heavy, paid, and want your data. MacTrack is the opposite
 
 - **Tracks focused time, not open windows.** Time counts only for the app you are actually in front of. Background apps never inflate your totals.
 - **Tracks individual websites.** When you are in a browser, MacTrack credits time to the site's domain (`youtube.com`, `github.com`), so you see web time the way you experience it. Works with Safari, Chrome, Edge, Brave, Arc, and Vivaldi.
+- **Splits your X accounts.** Run more than one X account? MacTrack reads which one is active straight from the page and tracks each on its own row, so the account you doomscroll and the one you use for work never blur together.
 - **Knows when you step away.** Tracking pauses when you go idle or lock the screen, so a coffee break never lands on whatever you left open.
 - **Apps, Websites, and All.** Toggle between just apps, just sites, or one merged ranking sorted by time. In the merged view the browser app drops out so its individual sites tell the real story.
-- **A clean daily line chart.** The top items plotted across your day, with a hover scrubber for exact values. Set the chart's start and end hours in settings.
+- **A clean daily line chart.** The top items plotted across your day, with a hover scrubber for exact values. Set the chart's start and end hours in settings. Each line is drawn in the app or site's own brand color.
+- **Drill into any row.** Click an app or site to open its detail — a bar chart of when the time went (per hour across the day, or per day across the week) in its own brand color, with its share of your day, or your whole week, called out.
 - **Glanceable totals.** The menu bar shows live time for whatever you are on right now. Open the popover for the full breakdown.
 - **Right-click to ignore.** Don't want something tracked? Right-click any row and choose "Don't track." It disappears and stays gone.
 - **A productivity score.** Tag any app or site as productive or unproductive (right-click → **Productivity**). MacTrack rolls your day into a Productive / Unproductive / Other donut so you see your focus at a glance; anything untagged counts as Other.
@@ -42,6 +44,23 @@ Click any day's square to **rewind the whole popover to that day**: the donut, t
 
 <p align="center">
   <img src="docs/activity.png" width="300" alt="Activity grid colored by each day's dominant category" />
+</p>
+
+### Drill into any app or site
+
+Click any row to open its detail: a bar chart of exactly when the time went — minute-by-hour across the day, or totalled per day across the week — drawn in the app or site's **own brand color**, pulled live from its icon or favicon (Safari's blue, YouTube's red). The header calls out its share of your screen time: **% of today** in the day view, or **% of the whole week** in the week view.
+
+<p align="center">
+  <img src="docs/detail.png" width="300" alt="An app's detail: hourly bar chart in its brand color, with its share of the day" />
+  <img src="docs/detail-week.png" width="300" alt="The same detail in week view, showing its share of the week" />
+</p>
+
+### X accounts, tracked separately
+
+Signed into more than one X account? MacTrack reads the **active** account straight from the page and tracks each one on its own row — so the account you doomscroll and the one you keep professional never get lumped together. Open it and a slider lets you switch between accounts or see the combined **All** total, and you can tag each account productive or unproductive on its own. Because all X accounts share one URL, this needs **"Allow JavaScript from Apple Events"** turned on in your browser's Develop menu — the one signal that reveals which account is live. (Account names blurred below.)
+
+<p align="center">
+  <img src="docs/x-accounts.png" width="300" alt="X account switcher: an All total plus a row per account" />
 </p>
 
 ## Blocking
