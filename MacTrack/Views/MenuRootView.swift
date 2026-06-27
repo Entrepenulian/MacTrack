@@ -19,6 +19,14 @@ struct MenuRootView: View {
     /// The day the popover is showing. Defaults to today; tapping a past day in the
     /// activity grid switches every section — donut, list, chart — to that day.
     @State private var viewDay: String = DayKey.today
+    /// A row tapped open — shows that app/site's detail (hourly bar chart).
+    @State private var selectedEntry: UsageEntry?
+    /// The open detail's current title + total, mirrored into the hero timer so the
+    /// big number tracks the detail's selection (e.g. the X "All" total).
+    @State private var detailLabel: String?
+    @State private var detailSeconds: Double?
+    /// Resolved brand colors per entry, so chart lines match the detail bar chart.
+    @State private var entryColors: [String: Color] = [:]
     @AppStorage("showOverview") private var showOverview = false
     @AppStorage("idleThreshold") private var idleThreshold: Double = 120
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
@@ -63,7 +71,9 @@ struct MenuRootView: View {
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             HeaderView(showSettings: $showSettings, showOverview: $showOverview,
-                       viewDay: viewDay, onReturnToToday: returnToToday)
+                       viewDay: viewDay, onReturnToToday: returnToToday,
+                       overrideLabel: selectedEntry != nil ? detailLabel : nil,
+                       overrideSeconds: selectedEntry != nil ? detailSeconds : nil)
 
             // Active-block countdowns belong to "right now" on the details view —
             // hide them on the productivity overview and when looking back at a
@@ -89,12 +99,37 @@ struct MenuRootView: View {
             }
         }
         .animation(.calm, value: showOverview)
+        // A selected row's detail is contextual — drop it when the scope, day, or
+        // overview toggle changes so you never land on a stale detail.
+        .onChange(of: showOverview) { selectedEntry = nil }
+        .onChange(of: scope) { selectedEntry = nil }
+        .onChange(of: viewDay) { selectedEntry = nil }
     }
 
-    /// The ranked Apps / Websites / All list plus the line chart and footer.
+    /// The ranked Apps / Websites / All list plus the line chart — or, when a row
+    /// is tapped open, that entry's detail (hourly bar chart). Footer stays put.
     private var detailsBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             divider.padding(.top, 16).padding(.bottom, 14)
+            if let sel = selectedEntry {
+                EntryDetailView(entry: sel, day: viewDay,
+                                startHour: chartStartHour, endHour: chartEndHour,
+                                onBack: { withAnimation(detailCurve) { selectedEntry = nil } },
+                                onReadout: { detailLabel = $0; detailSeconds = $1 })
+                    .id(sel.id)
+                    .transition(.opacity)
+            } else {
+                listAndChart
+                    .transition(.opacity)
+            }
+            divider.padding(.top, 12).padding(.bottom, 11)
+            footer
+        }
+        .animation(detailCurve, value: selectedEntry?.id)
+    }
+
+    private var listAndChart: some View {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 SegmentedToggle(selection: $scope)
                 AllButton(selection: $scope)
@@ -112,7 +147,7 @@ struct MenuRootView: View {
                 if entries.isEmpty {
                     EmptyStateView(scope: scope)
                 } else {
-                    UsageListView(entries: entries)
+                    UsageListView(entries: entries, onSelect: openEntry)
                 }
             }
             .id("\(scope)-\(viewDay)")
@@ -122,7 +157,7 @@ struct MenuRootView: View {
             if !entries.isEmpty {
                 insetDivider.padding(.top, 14).padding(.bottom, 12)
                 UsageChartView(
-                    lines: store.chartLines(entries: entries, for: viewDay,
+                    lines: store.chartLines(entries: entries, for: viewDay, colors: entryColors,
                                             startMinute: chartStartHour * 60,
                                             endMinute: chartEndHour * 60),
                     startMinute: chartStartHour * 60,
@@ -130,11 +165,18 @@ struct MenuRootView: View {
                 )
                 .id("\(scope)-\(viewDay)")
                 .transition(.opacity)
+                .task(id: "\(scope)-\(viewDay)") {
+                    for entry in entries.prefix(10) {
+                        entryColors[entry.id] = await IconColor.resolve(for: entry)
+                    }
+                }
             }
-
-            divider.padding(.top, 12).padding(.bottom, 11)
-            footer
         }
+    }
+
+    private let detailCurve: Animation = .timingCurve(0.22, 1, 0.36, 1, duration: 0.3)
+    private func openEntry(_ entry: UsageEntry) {
+        withAnimation(detailCurve) { selectedEntry = entry }
     }
 
     /// Active blocks with a live countdown. No cancel control — a block can only

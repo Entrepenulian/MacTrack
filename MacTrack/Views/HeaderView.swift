@@ -9,6 +9,10 @@ struct HeaderView: View {
     /// date and total tracked time, with a "Today" button to return.
     var viewDay: String = DayKey.today
     var onReturnToToday: () -> Void = {}
+    /// When a detail is open, the hero mirrors what it's showing (e.g. the X "All"
+    /// total) instead of the live focus.
+    var overrideLabel: String? = nil
+    var overrideSeconds: Double? = nil
     @AppStorage("wakeHour") private var wakeHour: Int = 8
 
     private var isToday: Bool { viewDay == DayKey.today }
@@ -16,7 +20,7 @@ struct HeaderView: View {
     /// The thing currently in focus — a website if you're on one, otherwise the
     /// app. The big readout reflects *this*, not the whole-day total.
     private var focusLabel: String {
-        if let domain = monitor.currentDomain { return domain }
+        if let domain = monitor.currentDomain { return SiteKey.display(domain) }
         if let name = monitor.currentAppName { return name }
         return "Today"
     }
@@ -31,11 +35,13 @@ struct HeaderView: View {
         return s.productive + s.unproductive + s.other
     }
 
-    /// What the big number shows: live focus today, the day's total in the past.
-    private var readoutSeconds: Double { isToday ? focusSeconds : dayTotalSeconds }
+    /// What the big number shows: an open detail's total, else live focus today, or
+    /// the day's total in the past.
+    private var readoutSeconds: Double { overrideSeconds ?? (isToday ? focusSeconds : dayTotalSeconds) }
     private var dimmed: Bool { isToday && (monitor.isPaused || monitor.isSleeping) }
 
     private var headerLabel: String {
+        if let overrideLabel { return overrideLabel }
         if !isToday { return Self.dateLabel(viewDay) }
         if monitor.isSleeping { return "Asleep until \(hourLabel(wakeHour))" }
         if monitor.isPaused { return "Paused" }
