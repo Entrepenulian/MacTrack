@@ -57,11 +57,28 @@ struct EntryDetailView: View {
         guard isXSwitcher else { return entry.title }
         return selectedAccount.isEmpty ? "x.com" : SiteKey.display(selectedAccount)
     }
+    /// The entry's total for the active range: the viewed day, or the week's sum.
     private var totalSeconds: Double {
+        if range == .week { return weekBars.reduce(0) { $0 + $1.seconds } }
+        return dayTotalSeconds
+    }
+    private var dayTotalSeconds: Double {
         guard isXSwitcher else { return entry.seconds }
         // "All" is the true aggregate — every account plus any untagged x.com time.
         if selectedAccount.isEmpty { return store.entrySeconds(entryID: "site:" + (xBase ?? ""), for: day) }
         return xAccounts.first { $0.key == selectedAccount }?.seconds ?? 0
+    }
+    /// What the header percentage is measured against: the viewed day's total screen
+    /// time, or — in Week view — every day's total screen time that week summed.
+    private var rangeScreenTime: Double {
+        if range == .week {
+            return weekBars.reduce(0.0) { sum, d in
+                let s = store.productivitySplit(for: d.key)
+                return sum + s.productive + s.unproductive + s.other
+            }
+        }
+        let s = store.productivitySplit(for: day)
+        return s.productive + s.unproductive + s.other
     }
 
     /// Opening from a specific account row pre-selects it; otherwise default to
@@ -127,6 +144,7 @@ struct EntryDetailView: View {
         }
         .onAppear { initSelection(); onReadout(titleText, totalSeconds) }
         .onChange(of: selectedAccount) { onReadout(titleText, totalSeconds) }
+        .onChange(of: range) { onReadout(titleText, totalSeconds) }
         .onChange(of: totalSeconds) { onReadout(titleText, totalSeconds) }
         .task(id: entry.id) {
             let c = await IconColor.resolve(for: entry)
@@ -153,7 +171,7 @@ struct EntryDetailView: View {
                     .font(.system(size: 17, weight: .bold).monospacedDigit())
                     .foregroundStyle(barColor)
                     .contentTransition(.numericText())
-                Text(day == DayKey.today ? "of today" : "of that day")
+                Text(percentLabel)
                     .font(.rowMeta)
                     .foregroundStyle(Theme.Ink.tertiary)
             }
@@ -181,12 +199,17 @@ struct EntryDetailView: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
     }
 
-    /// This entry's share of the day's total tracked time (≥1% for any real time).
+    /// This entry's share of screen time over the active range — the day, or the
+    /// week so far (its weekly total ÷ the week's total screen time). ≥1% for any
+    /// real time.
     private var dayPercent: Int {
-        let s = store.productivitySplit(for: day)
-        let total = s.productive + s.unproductive + s.other
-        guard total > 0, totalSeconds > 0 else { return 0 }
-        return min(100, max(1, Int((totalSeconds / total * 100).rounded())))
+        guard rangeScreenTime > 0, totalSeconds > 0 else { return 0 }
+        return min(100, max(1, Int((totalSeconds / rangeScreenTime * 100).rounded())))
+    }
+
+    private var percentLabel: String {
+        if range == .week { return "of week" }
+        return day == DayKey.today ? "of today" : "of that day"
     }
 
     @ViewBuilder private var icon: some View {
