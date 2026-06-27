@@ -12,6 +12,9 @@ final class BrowserURLReader {
         let bundleID: String
         let appName: String      // AppleScript application name
         let tabAccessor: String  // "current tab" (Safari) or "active tab" (Chromium)
+        /// Chromium browsers run page JavaScript via `execute … javascript`; Safari
+        /// via `do JavaScript … in <tab>`.
+        var chromium: Bool { !appName.hasPrefix("Safari") }
     }
 
     /// Supported browsers, keyed by bundle identifier.
@@ -75,6 +78,52 @@ final class BrowserURLReader {
                 completion(.tab(TabInfo(url: url, title: (title?.isEmpty == false) ? title : nil)))
             }
         }
+    }
+
+    /// JavaScript that returns the logged-in X account's handle — the one signal that
+    /// reflects the *active* account, since the URL is shared across accounts. Reads
+    /// the left-nav Profile link first, then falls back to the account-switcher
+    /// button's "@handle". Single-quoted, no double quotes, so it embeds cleanly in
+    /// the AppleScript string.
+    private static let xAccountJS =
+        "(function(){var a=document.querySelector('a[data-testid=AppTabBar_Profile_Link]');if(a){var x=a.getAttribute('href');if(x)return x;}var b=document.querySelector('[data-testid=SideNav_AccountSwitcher_Button]');if(b){var m=(b.textContent||'').match(/@([A-Za-z0-9_]+)/);if(m)return m[1];}return '';})()"
+
+    /// Reads the active X account handle from the front tab via a one-line JS, in a
+    /// separate script so a JS failure can never break URL reading. Returns nil if
+    /// the page has no account, the browser blocks JS-from-Apple-Events, or anything
+    /// errors — the caller then just tracks the bare domain.
+    func fetchAccount(bundleID: String, completion: @escaping (String?) -> Void) {
+        guard let browser = Self.browsers[bundleID] else { completion(nil); return }
+        queue.async {
+            let js = Self.xAccountJS
+            let invoke = browser.chromium
+                ? "execute (active tab of front window) javascript \"\(js)\""
+                : "do JavaScript \"\(js)\" in current tab of front window"
+            let source = """
+            tell application "\(browser.appName)"
+                if (count of windows) is 0 then return ""
+                try
+                    return (\(invoke)) as text
+                on error
+                    return ""
+                end try
+            end tell
+            """
+            var err: NSDictionary?
+            let desc = NSAppleScript(source: source)?.executeAndReturnError(&err)
+            let raw = (err == nil ? desc?.stringValue : nil) ?? ""
+            let handle = Self.parseHandle(raw)
+            DispatchQueue.main.async { completion(handle) }
+        }
+    }
+
+    /// "/elonmusk" → "elonmusk", validated as a plausible handle.
+    static func parseHandle(_ raw: String) -> String? {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("/") { s.removeFirst() }
+        guard !s.isEmpty, s.count <= 20,
+              s.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else { return nil }
+        return s
     }
 
     /// Forces the active tab off a blocked site by loading about:blank.
@@ -144,5 +193,36 @@ enum DomainReducer {
             return labels.suffix(3).joined(separator: ".")
         }
         return lastTwo
+    }
+}
+
+// MARK: - Per-account site keys
+
+/// Sites that can be split by account (today: X / Twitter) are stored under a
+/// composite key, "x.com/@handle", so each account is its own trackable, taggable
+/// entry. Everything else stays the bare domain. These helpers build and read that
+/// key, and recover the base domain for favicons and the handle for display.
+enum SiteKey {
+    private static let mark = "/@"
+    /// Domains for which we track per account, when a handle is detectable.
+    static let perAccount: Set<String> = ["x.com", "twitter.com"]
+
+    static func splits(_ domain: String) -> Bool { perAccount.contains(domain) }
+
+    /// "x.com" + "elonmusk" → "x.com/@elonmusk".
+    static func account(base: String, handle: String) -> String { base + mark + handle }
+
+    static func isAccount(_ key: String) -> Bool { key.contains(mark) }
+
+    /// The bare domain behind a key — for favicons and exclusion checks.
+    static func base(_ key: String) -> String {
+        guard let r = key.range(of: mark) else { return key }
+        return String(key[..<r.lowerBound])
+    }
+
+    /// What the row/header shows: "@handle" for an account, else the domain.
+    static func display(_ key: String) -> String {
+        guard let r = key.range(of: mark) else { return key }
+        return "@" + key[r.upperBound...]
     }
 }
