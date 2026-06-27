@@ -87,8 +87,10 @@ struct FaviconView: View {
             }
         }
         .task(id: domain) {
-            if let cached = FaviconProvider.shared.cached(domain) { image = cached; return }
-            image = await FaviconProvider.shared.image(for: domain)
+            // Per-account keys ("x.com/@handle") share their base domain's favicon.
+            let d = SiteKey.base(domain)
+            if let cached = FaviconProvider.shared.cached(d) { image = cached; return }
+            image = await FaviconProvider.shared.image(for: d)
         }
     }
 }

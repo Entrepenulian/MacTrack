@@ -237,7 +237,7 @@ final class UsageStore: ObservableObject {
         where !excludedSites.contains(stat.domain) && siteTags[stat.domain] == tag {
             items.append(UsageEntry(
                 id: "site:" + stat.domain, kind: .site(domain: stat.domain),
-                title: stat.domain, subtitle: nil, seconds: stat.seconds,
+                title: SiteKey.display(stat.domain), subtitle: nil, seconds: stat.seconds,
                 category: .web, fraction: 0))
         }
         let maxSeconds = items.map(\.seconds).max() ?? 1
@@ -271,8 +271,9 @@ final class UsageStore: ObservableObject {
 
     func siteEntries(for dayKey: String, minSeconds: Double = 0, alwaysInclude: String? = nil) -> [UsageEntry] {
         guard let day = days[dayKey] else { return [] }
-        // The site you're currently on always shows, even under the minute floor,
-        // so the list immediately reflects what you're looking at.
+        // Each X account (x.com/@handle) is its own row, shown as "@handle" with the
+        // domain beneath. The site you're currently on always shows, even under the
+        // minute floor.
         let sorted = day.sites.values
             .filter { !excludedSites.contains($0.domain) && ($0.seconds >= minSeconds || $0.domain == alwaysInclude) }
             .sorted { $0.seconds > $1.seconds }
@@ -281,13 +282,23 @@ final class UsageStore: ObservableObject {
             UsageEntry(
                 id: "site:" + stat.domain,
                 kind: .site(domain: stat.domain),
-                title: stat.domain,
-                subtitle: stat.lastTitle,   // shown live, but never saved to disk
+                title: SiteKey.display(stat.domain),
+                subtitle: SiteKey.isAccount(stat.domain) ? SiteKey.base(stat.domain) : stat.lastTitle,
                 seconds: stat.seconds,
                 category: .web,
                 fraction: maxSeconds > 0 ? stat.seconds / maxSeconds : 0
             )
         }
+    }
+
+    /// The individual accounts behind a per-account base ("x.com") for a day — each
+    /// with its handle, time, and (via siteTag) tag. Powers the account manager.
+    func siteAccounts(base: String, for dayKey: String) -> [(key: String, handle: String, seconds: Double)] {
+        guard let day = days[dayKey] else { return [] }
+        return day.sites.values
+            .filter { SiteKey.isAccount($0.domain) && SiteKey.base($0.domain) == base && !excludedSites.contains($0.domain) }
+            .map { (key: $0.domain, handle: SiteKey.display($0.domain), seconds: $0.seconds) }
+            .sorted { $0.seconds > $1.seconds }
     }
 
     /// Non-browser apps and websites merged into one ranking, sorted by time.
@@ -313,7 +324,7 @@ final class UsageStore: ObservableObject {
     /// Builds cumulative-minutes line series for the given (already ranked) top
     /// entries, within the visible [startMinute, endMinute] window. Each line ends
     /// at its full total, so the chart's endpoints match the list's times.
-    func chartLines(entries: [UsageEntry], for dayKey: String, startMinute: Int, endMinute: Int) -> [ChartLineData] {
+    func chartLines(entries: [UsageEntry], for dayKey: String, colors: [String: Color] = [:], startMinute: Int, endMinute: Int) -> [ChartLineData] {
         let daySamples = samples(for: dayKey)
         // Today's line stops at the current minute; a finished past day runs to the
         // end of the window.
@@ -337,7 +348,10 @@ final class UsageStore: ObservableObject {
             if lastX < Double(cap) {
                 points.append(CGPoint(x: Double(cap), y: cumulative / 60.0))
             }
-            return ChartLineData(id: entry.id, label: entry.title, color: Theme.chartColor(index),
+            // Each line takes the app/site's own brand color (from its icon/favicon),
+            // matching the detail bar chart; falls back to the palette until resolved.
+            return ChartLineData(id: entry.id, label: entry.title,
+                                 color: colors[entry.id] ?? Theme.chartColor(index),
                                  points: points, totalMinutes: cumulative / 60.0)
         }
     }
@@ -350,6 +364,68 @@ final class UsageStore: ObservableObject {
         let loaded = db?.loadSamples(day: dayKey) ?? [:]
         pastSamples[dayKey] = loaded
         return loaded
+    }
+
+    /// Minutes spent on one entry during each hour of `[startHour, endHour)` — the
+    /// per-app detail bar chart. Each value is 0…60 (an hour holds at most 60 min).
+    func hourlyMinutes(entryID: String, for dayKey: String, startHour: Int, endHour: Int) -> [(hour: Int, minutes: Double)] {
+        let s = mergedSamples(entryID: entryID, for: dayKey)
+        return stride(from: startHour, to: max(startHour + 1, endHour), by: 1).map { h in
+            var sec = 0.0
+            for m in (h * 60)..<(h * 60 + 60) { sec += s[m] ?? 0 }
+            return (h, min(60, sec / 60))
+        }
+    }
+
+    /// Per-minute samples for an entry. An aggregate base ("site:x.com") sums all of
+    /// its accounts; everything else is the single key.
+    private func mergedSamples(entryID: String, for dayKey: String) -> [Int: Double] {
+        let all = samples(for: dayKey)
+        if entryID.hasPrefix("site:") {
+            let key = String(entryID.dropFirst(5))
+            if SiteKey.splits(key) && !SiteKey.isAccount(key) {
+                var out: [Int: Double] = [:]
+                let base = "site:" + key
+                for (k, v) in all where k == base || k.hasPrefix(base + "/@") {
+                    for (m, sec) in v { out[m, default: 0] += sec }
+                }
+                return out
+            }
+        }
+        return all[entryID] ?? [:]
+    }
+
+    /// Total seconds an entry ("app:bundleID" / "site:domain") accrued on one day.
+    /// An aggregate base ("site:x.com") sums all of its accounts.
+    func entrySeconds(entryID: String, for dayKey: String) -> Double {
+        guard let day = days[dayKey] else { return 0 }
+        let parts = entryID.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return 0 }
+        switch parts[0] {
+        case "app": return day.apps[parts[1]]?.seconds ?? 0
+        case "site":
+            let key = parts[1]
+            if SiteKey.splits(key) && !SiteKey.isAccount(key) {
+                return day.sites.values
+                    .filter { $0.domain == key || $0.domain.hasPrefix(key + "/@") }
+                    .reduce(0) { $0 + $1.seconds }
+            }
+            return day.sites[key]?.seconds ?? 0
+        default: return 0
+        }
+    }
+
+    /// One entry's total for each of the seven days in `dayKey`'s calendar week
+    /// (Sun…Sat) — the per-app "Week" bar chart.
+    func weeklyTotals(entryID: String, week dayKey: String) -> [(key: String, date: Date, seconds: Double)] {
+        let cal = Calendar.current
+        let base = DayKey.date(from: dayKey) ?? Date()
+        let start = cal.dateInterval(of: .weekOfYear, for: base)?.start ?? cal.startOfDay(for: base)
+        return (0..<7).map { i in
+            let d = cal.date(byAdding: .day, value: i, to: start) ?? start
+            let k = DayKey.key(for: d)
+            return (k, d, entrySeconds(entryID: entryID, for: k))
+        }
     }
 
     /// Category breakdown (today) — kept for future use.
