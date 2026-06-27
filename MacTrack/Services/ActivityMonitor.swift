@@ -32,6 +32,10 @@ final class ActivityMonitor: ObservableObject {
     /// blocks on Apple Events.
     private var lastTab: [String: BrowserURLReader.TabInfo] = [:]
     private var pendingFetch: Set<String> = []
+    /// Last-known active X account handle (read from the page DOM), and an in-flight
+    /// guard so a tick never fires more than one account read at a time.
+    private var lastXAccount: String?
+    private var pendingAccountFetch = false
 
     /// Auto-resume: after pausing, the first real mouse movement resumes tracking
     /// so a pause can never be forgotten. A short grace ignores the click that
@@ -213,14 +217,26 @@ final class ActivityMonitor: ObservableObject {
             if let tab = lastTab[bundleID],
                let domain = DomainReducer.registrableDomain(from: tab.url),
                !store.isSiteExcluded(domain) {
-                currentDomain = domain
-                store.addSiteTime(delta, domain: domain, title: tab.title)
+                // X/Twitter time is split by the active account when we can read it;
+                // otherwise it's the bare domain like any other site.
+                if SiteKey.splits(domain) {
+                    let credited = lastXAccount.map { SiteKey.account(base: domain, handle: $0) } ?? domain
+                    currentDomain = credited
+                    store.addSiteTime(delta, domain: credited, title: tab.title)
+                    refreshXAccount(bundleID: bundleID)
+                } else {
+                    currentDomain = domain
+                    store.addSiteTime(delta, domain: domain, title: tab.title)
+                    lastXAccount = nil
+                }
             } else {
                 currentDomain = nil
+                lastXAccount = nil
             }
             refreshBrowserTab(bundleID: bundleID)
         } else {
             currentDomain = nil
+            lastXAccount = nil
         }
 
         // Feed the focus guard the tag of whatever's in focus (the site if we're
@@ -258,6 +274,18 @@ final class ActivityMonitor: ObservableObject {
         currentAppName = front.localizedName ?? bundleID
         currentBundleID = bundleID
         if BrowserURLReader.isBrowser(bundleID) { refreshBrowserTab(bundleID: bundleID) }
+    }
+
+    /// Reads the active X account (off the main thread) and caches it for the next
+    /// ticks, so per-account crediting needs no per-tick Apple Event round trip.
+    private func refreshXAccount(bundleID: String) {
+        guard !pendingAccountFetch else { return }
+        pendingAccountFetch = true
+        browserReader.fetchAccount(bundleID: bundleID) { [weak self] handle in
+            guard let self else { return }
+            self.pendingAccountFetch = false
+            self.lastXAccount = handle
+        }
     }
 
     private func refreshBrowserTab(bundleID: String) {
