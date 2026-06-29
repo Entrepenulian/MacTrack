@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// A self-contained settings page: its own back/title header, then grouped cards
-/// (General, Chart range, Privacy). Clean rows, hairline dividers, one accent.
+/// Settings in two levels: a **home** that lists the categories, and a **detail**
+/// for each one with just that group's controls — so no single screen runs off the
+/// bottom. Tapping the gear lands on the home; each category pushes in and back.
 struct SettingsView: View {
     @EnvironmentObject var monitor: ActivityMonitor
     @EnvironmentObject var loginItem: LoginItem
@@ -25,6 +26,45 @@ struct SettingsView: View {
 
     var onBack: () -> Void
 
+    /// Navigation: nil shows the settings home (category list); a route shows that
+    /// one category's page.
+    @State private var route: Route? = nil
+
+    enum Route: String, CaseIterable, Identifiable {
+        case general, sleep, focusGuard, chart, tracking, blocking
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .general: "General"
+            case .sleep: "Good Night"
+            case .focusGuard: "Focus Guard"
+            case .chart: "Chart"
+            case .tracking: "Website Tracking"
+            case .blocking: "Blocking"
+            }
+        }
+        var icon: String {
+            switch self {
+            case .general: "gearshape.fill"
+            case .sleep: "moon.stars.fill"
+            case .focusGuard: "sparkles"
+            case .chart: "chart.xyaxis.line"
+            case .tracking: "globe"
+            case .blocking: "hand.raised.fill"
+            }
+        }
+        var summary: String {
+            switch self {
+            case .general: "Launch at login · idle timeout"
+            case .sleep: "Pause overnight · wake time"
+            case .focusGuard: "Quote blur on unproductive time"
+            case .chart: "Daily chart hours"
+            case .tracking: "Automation permission · privacy"
+            case .blocking: "System-level content filter"
+            }
+        }
+    }
+
     /// Pairs each source with its persisted toggle so the list and the Test
     /// button's enabled state both react to a change here.
     private var sourceBindings: [(QuoteSource, Binding<Bool>)] {
@@ -38,167 +78,214 @@ struct SettingsView: View {
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.lg) {
-            header
-
-            section("General") {
-                card {
-                    row {
-                        labelBlock("Launch at login", "Start tracking when you sign in")
-                        Spacer(minLength: Theme.Space.sm)
-                        Toggle("", isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.set($0) }))
-                            .labelsHidden().toggleStyle(.switch).tint(Theme.settingsAccent)
-                    }
-                    rowDivider
-                    VStack(alignment: .leading, spacing: 9) {
-                        HStack {
-                            Text("Idle timeout").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
-                            Spacer()
-                            Text("\(Int(idleThreshold))s")
-                                .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
-                        }
-                        PremiumSlider(value: $idleThreshold, range: 60...600, step: 60, accent: Theme.settingsAccent)
-                            .onChange(of: idleThreshold) { _, v in monitor.setIdleThreshold(v) }
-                    }
-                    .padding(.horizontal, 14).padding(.vertical, 11)
-                }
+        Group {
+            if let route {
+                detail(route)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: 18)),
+                                            removal: .opacity.combined(with: .offset(x: 18))))
+            } else {
+                home
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: -12)),
+                                            removal: .opacity.combined(with: .offset(x: -12))))
             }
-
-            section("Sleep") {
-                card {
-                    row {
-                        labelBlock(
-                            monitor.isSleeping ? "Asleep until \(hourLabel(wakeHour))" : "Good night",
-                            monitor.isSleeping ? "Tracking is off for the night" : "Stop tracking until your wake time"
-                        )
-                        Spacer(minLength: Theme.Space.sm)
-                        Button(monitor.isSleeping ? "Wake now" : "Sleep") {
-                            monitor.sleepForNight(wakeHour: wakeHour)
-                        }
-                        .buttonStyle(.plain).font(.rowValue).foregroundStyle(Theme.settingsAccent)
-                    }
-                    rowDivider
-                    stepperRow("Wake time", value: $wakeHour, range: 0...23)
-                }
-            }
-
-            focusGuardSection
-
-            section("Chart range") {
-                card {
-                    stepperRow("Start", value: $chartStartHour, range: 0...max(0, chartEndHour - 1))
-                    rowDivider
-                    stepperRow("End", value: $chartEndHour, range: min(23, chartStartHour + 1)...23)
-                }
-            }
-
-            section("Privacy") {
-                card {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("Website tracking").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
-                        Text("MacTrack reads the active tab's address via Automation. Your history stays on this Mac; only site icons are fetched from the web.")
-                            .font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button("Open Automation Settings") { Permissions.openAutomationSettings() }
-                            .buttonStyle(.plain).font(.rowValue).foregroundStyle(Theme.settingsAccent).padding(.top, 3)
-                    }
-                    .padding(.horizontal, 14).padding(.vertical, 12)
-                }
-            }
-
-            section("Blocking") {
-                card {
-                    VStack(alignment: .leading, spacing: 7) {
-                        HStack {
-                            Text("System-level blocking").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
-                            Spacer()
-                            Text(filter.statusText).font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
-                        }
-                        Text("A DoH-proof system filter that keeps blocking even if MacTrack quits. Needs a one-time approval in System Settings.")
-                            .font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 16) {
-                            Button("Enable") { filter.enable() }
-                                .buttonStyle(.plain).font(.rowValue)
-                                .foregroundStyle(Theme.settingsAccent).disabled(filter.isBusy)
-                            Button("Turn off") { filter.disable() }
-                                .buttonStyle(.plain).font(.rowValue)
-                                .foregroundStyle(Theme.Ink.secondary)
-                        }
-                        .padding(.top, 3)
-                    }
-                    .padding(.horizontal, 14).padding(.vertical, 12)
-                }
-            }
-
-            Text("MacTrack \(version) · all data stays on this Mac")
-                .font(.rowMeta).foregroundStyle(Theme.Ink.faint)
-                .frame(maxWidth: .infinity, alignment: .center)
         }
+        .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.3), value: route)
+        // Consistent breathing room below the last card on every settings page.
+        .padding(.bottom, 10)
         .onAppear { loginItem.refresh(); filter.refresh() }
     }
 
-    // MARK: Focus Guard
+    // MARK: Settings home (the category list)
 
-    private var focusGuardSection: some View {
-        section("Focus Guard") {
-            card {
-                // Master switch.
-                row {
-                    labelBlock("Smart quote reminders",
-                               "Blur the screen with a quote when you linger on unproductive apps")
-                    Spacer(minLength: Theme.Space.sm)
-                    Toggle("", isOn: $fgEnabled.animation(.easeInOut(duration: 0.28)))
-                        .labelsHidden().toggleStyle(.switch).tint(Theme.settingsAccent)
-                }
-
-                if fgEnabled {
-                    rowDivider
-
-                    // How long is "too long".
-                    VStack(alignment: .leading, spacing: 9) {
-                        HStack {
-                            Text("Nudge after").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
-                            Spacer()
-                            Text("\(Int(fgThreshold)) min")
-                                .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
-                        }
-                        PremiumSlider(value: $fgThreshold, range: 5...60, step: 5, accent: Theme.settingsAccent)
-                    }
-                    .padding(.horizontal, 14).padding(.vertical, 11)
-
-                    rowDivider
-
-                    HStack {
-                        Text("Quote sources").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
-                        Spacer()
-                        Text("\(selectedCount) of \(sourceBindings.count)")
-                            .font(.rowMeta.monospacedDigit()).foregroundStyle(Theme.Ink.tertiary)
-                    }
-                    .padding(.horizontal, 14).padding(.top, 11).padding(.bottom, 4)
-
-                    VStack(spacing: 0) {
-                        ForEach(Array(sourceBindings.enumerated()), id: \.element.0) { idx, pair in
-                            if idx > 0 { rowDivider.padding(.leading, 54) }
-                            SourceRow(source: pair.0, isOn: pair.1, accent: Theme.settingsAccent)
-                        }
-                    }
-
-                    rowDivider
-
-                    // Preview the blur with a random quote from the selection.
-                    row {
-                        labelBlock("Preview", "Play the blur with a random quote you've selected")
-                        Spacer(minLength: Theme.Space.sm)
-                        TestButton(title: "Test") { focusGuard.test() }
+    private var home: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.lg) {
+            header
+            LayeredCard(level: 1) {
+                VStack(spacing: 0) {
+                    ForEach(Array(Route.allCases.enumerated()), id: \.element) { i, r in
+                        if i > 0 { rowDivider.padding(.leading, 54) }
+                        SettingsHomeRow(route: r) { open(r) }
                     }
                 }
             }
-            .animation(.easeInOut(duration: 0.28), value: fgEnabled)
+            versionFooter
         }
     }
 
-    // MARK: Header
+    // MARK: Section detail
+
+    private func detail(_ r: Route) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.lg) {
+            detailHeader(r)
+            switch r {
+            case .general:    generalCard
+            case .sleep:      sleepCard
+            case .focusGuard: focusGuardCard
+            case .chart:      chartCard
+            case .tracking:   trackingCard
+            case .blocking:   blockingCard
+            }
+        }
+    }
+
+    private func open(_ r: Route?) {
+        withAnimation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.3)) { route = r }
+    }
+
+    // MARK: Section cards
+
+    private var generalCard: some View {
+        card {
+            row {
+                labelBlock("Launch at login", "Start tracking when you sign in")
+                Spacer(minLength: Theme.Space.sm)
+                Toggle("", isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.set($0) }))
+                    .labelsHidden().toggleStyle(.switch).tint(Theme.settingsAccent)
+            }
+            rowDivider
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Text("Idle timeout").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                    Spacer()
+                    Text("\(Int(idleThreshold))s")
+                        .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
+                }
+                PremiumSlider(value: $idleThreshold, range: 60...600, step: 60, accent: Theme.settingsAccent)
+                    .onChange(of: idleThreshold) { _, v in monitor.setIdleThreshold(v) }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11)
+        }
+    }
+
+    private var sleepCard: some View {
+        card {
+            row {
+                labelBlock(
+                    monitor.isSleeping ? "Asleep until \(hourLabel(wakeHour))" : "Good night",
+                    monitor.isSleeping ? "Tracking is off for the night" : "Stop tracking until your wake time"
+                )
+                Spacer(minLength: Theme.Space.sm)
+                Button(monitor.isSleeping ? "Wake now" : "Sleep") {
+                    monitor.sleepForNight(wakeHour: wakeHour)
+                }
+                .buttonStyle(.plain).font(.rowValue).foregroundStyle(Theme.settingsAccent)
+            }
+            rowDivider
+            stepperRow("Wake time", value: $wakeHour, range: 0...23)
+        }
+    }
+
+    private var chartCard: some View {
+        card {
+            stepperRow("Start", value: $chartStartHour, range: 0...max(0, chartEndHour - 1))
+            rowDivider
+            stepperRow("End", value: $chartEndHour, range: min(23, chartStartHour + 1)...23)
+        }
+    }
+
+    private var trackingCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Website tracking").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                Text("MacTrack reads the active tab's address via Automation. Your history stays on this Mac; only site icons are fetched from the web.")
+                    .font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open Automation Settings") { Permissions.openAutomationSettings() }
+                    .buttonStyle(.plain).font(.rowValue).foregroundStyle(Theme.settingsAccent).padding(.top, 3)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+        }
+    }
+
+    private var blockingCard: some View {
+        card {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Text("System-level blocking").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                    Spacer()
+                    Text(filter.statusText).font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
+                }
+                Text("A DoH-proof system filter that keeps blocking even if MacTrack quits. Needs a one-time approval in System Settings.")
+                    .font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 16) {
+                    Button("Enable") { filter.enable() }
+                        .buttonStyle(.plain).font(.rowValue)
+                        .foregroundStyle(Theme.settingsAccent).disabled(filter.isBusy)
+                    Button("Turn off") { filter.disable() }
+                        .buttonStyle(.plain).font(.rowValue)
+                        .foregroundStyle(Theme.Ink.secondary)
+                }
+                .padding(.top, 3)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+        }
+    }
+
+    private var focusGuardCard: some View {
+        card {
+            // Master switch.
+            row {
+                labelBlock("Smart quote reminders",
+                           "Blur the screen with a quote when you linger on unproductive apps")
+                Spacer(minLength: Theme.Space.sm)
+                Toggle("", isOn: $fgEnabled.animation(.easeInOut(duration: 0.28)))
+                    .labelsHidden().toggleStyle(.switch).tint(Theme.settingsAccent)
+            }
+
+            if fgEnabled {
+                rowDivider
+
+                // How long is "too long".
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack {
+                        Text("Nudge after").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                        Spacer()
+                        Text("\(Int(fgThreshold)) min")
+                            .font(.rowValue.monospacedDigit()).foregroundStyle(Theme.settingsAccent)
+                    }
+                    PremiumSlider(value: $fgThreshold, range: 5...60, step: 5, accent: Theme.settingsAccent)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 11)
+
+                rowDivider
+
+                HStack {
+                    Text("Quote sources").font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                    Spacer()
+                    Text("\(selectedCount) of \(sourceBindings.count)")
+                        .font(.rowMeta.monospacedDigit()).foregroundStyle(Theme.Ink.tertiary)
+                }
+                .padding(.horizontal, 14).padding(.top, 11).padding(.bottom, 4)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(sourceBindings.enumerated()), id: \.element.0) { idx, pair in
+                        if idx > 0 { rowDivider.padding(.leading, 54) }
+                        SourceRow(source: pair.0, isOn: pair.1, accent: Theme.settingsAccent)
+                    }
+                }
+
+                rowDivider
+
+                // Preview the blur with a random quote from the selection.
+                row {
+                    labelBlock("Preview", "Play the blur with a random quote you've selected")
+                    Spacer(minLength: Theme.Space.sm)
+                    TestButton(title: "Test") { focusGuard.test() }
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.28), value: fgEnabled)
+    }
+
+    private var versionFooter: some View {
+        Text("MacTrack \(version) · all data stays on this Mac")
+            .font(.rowMeta).foregroundStyle(Theme.Ink.faint)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 2)
+    }
+
+    // MARK: Headers
 
     private var header: some View {
         HStack(spacing: 10) {
@@ -210,14 +297,20 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: Building blocks
-
-    private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(text: title)
-            content()
+    private func detailHeader(_ r: Route) -> some View {
+        HStack(spacing: 9) {
+            GlassIconButton(systemName: "chevron.left", size: 26, help: "Settings") { open(nil) }
+            Image(systemName: r.icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.settingsAccent)
+            Text(r.title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.Ink.primary)
+            Spacer()
         }
     }
+
+    // MARK: Building blocks
 
     private func card<C: View>(@ViewBuilder _ content: () -> C) -> some View {
         LayeredCard(level: 1) { VStack(spacing: 0) { content() } }
@@ -253,6 +346,47 @@ struct SettingsView: View {
         let h12 = hour % 12 == 0 ? 12 : hour % 12
         let ap = (hour >= 12 && hour < 24) ? "PM" : "AM"
         return "\(h12) \(ap)"
+    }
+}
+
+// MARK: - Settings home row
+
+/// One category on the settings home: a tinted icon chip, its name and a one-line
+/// summary, and a chevron — the whole row is the hit target and lifts on hover.
+private struct SettingsHomeRow: View {
+    let route: SettingsView.Route
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: route.icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.settingsAccent)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(Theme.settingsAccent.opacity(0.12))
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(route.title).font(.rowTitle).foregroundStyle(Theme.Ink.primary)
+                    Text(route.summary).font(.rowMeta).foregroundStyle(Theme.Ink.tertiary)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+                Spacer(minLength: Theme.Space.sm)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(hovering ? Theme.Ink.secondary : Theme.Ink.faint)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 54)
+            .background(Color.primary.opacity(hovering ? 0.05 : 0))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+        .pointerStyle(.link)
     }
 }
 
