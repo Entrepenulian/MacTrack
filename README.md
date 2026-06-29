@@ -120,7 +120,7 @@ To measure per-website time, MacTrack reads the active tab's address through mac
 
 ## Settings
 
-Open settings from the gear in the popover: launch at login, the idle timeout, your good-night **wake time**, the chart's start and end hours, website-tracking permission, the system-level blocking toggle, and **Focus Guard** — switch it on, set how long counts as too long, tick the quote collections to draw from, and play a Test of the blur.
+Open settings from the gear in the popover. It opens to a **home that groups everything into categories** — General, Good Night, Focus Guard, Chart, Website Tracking, and Blocking — and you tap one to drill into just its controls, so no screen runs off the bottom: launch at login and the idle timeout; your good-night **wake time**; the chart's start and end hours; website-tracking permission; the system-level blocking toggle; and **Focus Guard** — switch it on, set how long counts as too long, tick the quote collections to draw from, and play a Test of the blur.
 
 <p align="center">
   <img src="docs/settings.png" width="280" alt="Settings" />
