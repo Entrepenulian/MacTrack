@@ -383,6 +383,23 @@ final class UsageStore: ObservableObject {
         return loaded
     }
 
+    /// The day's real active window — the first and last minute-of-day with any
+    /// tracked activity. Because time is only ever credited while you're present
+    /// (idle, locked, and asleep time are dropped), the first minute is when you
+    /// woke the Mac and started moving, and the last is when you got off. Powers a
+    /// chart that spans your actual usage instead of a fixed schedule. Nil if the
+    /// day has no activity yet.
+    func activeWindowMinutes(for dayKey: String) -> (start: Int, end: Int)? {
+        var lo = Int.max, hi = Int.min
+        for (_, minutes) in samples(for: dayKey) {
+            for (m, secs) in minutes where secs > 0 {
+                if m < lo { lo = m }
+                if m > hi { hi = m }
+            }
+        }
+        return lo <= hi ? (lo, hi) : nil
+    }
+
     /// Minutes spent on one entry during each hour of `[startHour, endHour)` — the
     /// per-app detail bar chart. Each value is 0…60 (an hour holds at most 60 min).
     func hourlyMinutes(entryID: String, for dayKey: String, startHour: Int, endHour: Int) -> [(hour: Int, minutes: Double)] {

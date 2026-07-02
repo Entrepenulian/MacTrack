@@ -33,6 +33,18 @@ struct MenuRootView: View {
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
     @AppStorage("chartEndHour") private var chartEndHour: Int = 22
 
+    /// The chart's x-axis window: the viewed day's real active span (first activity →
+    /// last activity, snapped to whole hours), so it tracks when you actually woke
+    /// the Mac and got off. Falls back to the configured hours when a day has no data.
+    private var chartWindow: (startHour: Int, endHour: Int) {
+        if let w = store.activeWindowMinutes(for: viewDay) {
+            let s = w.start / 60
+            let e = min(24, w.end / 60 + 1)
+            return (s, max(s + 1, e))
+        }
+        return (chartStartHour, chartEndHour)
+    }
+
     private var isViewingToday: Bool { viewDay == DayKey.today }
     private var appEntries: [UsageEntry] { store.appEntries(for: viewDay) }
     private var siteEntries: [UsageEntry] { store.siteEntries(for: viewDay) }
@@ -121,7 +133,7 @@ struct MenuRootView: View {
             divider.padding(.top, 16).padding(.bottom, 14)
             if let sel = selectedEntry {
                 EntryDetailView(entry: sel, day: viewDay,
-                                startHour: chartStartHour, endHour: chartEndHour,
+                                startHour: chartWindow.startHour, endHour: chartWindow.endHour,
                                 onBack: { withAnimation(detailCurve) { selectedEntry = nil } },
                                 onReadout: { detailLabel = $0; detailSeconds = $1 })
                     .id(sel.id)
@@ -166,10 +178,10 @@ struct MenuRootView: View {
                 insetDivider.padding(.top, 14).padding(.bottom, 12)
                 UsageChartView(
                     lines: store.chartLines(entries: entries, for: viewDay, colors: entryColors,
-                                            startMinute: chartStartHour * 60,
-                                            endMinute: chartEndHour * 60),
-                    startMinute: chartStartHour * 60,
-                    endMinute: chartEndHour * 60
+                                            startMinute: chartWindow.startHour * 60,
+                                            endMinute: chartWindow.endHour * 60),
+                    startMinute: chartWindow.startHour * 60,
+                    endMinute: chartWindow.endHour * 60
                 )
                 .id("\(scope)-\(viewDay)")
                 .transition(.opacity)
