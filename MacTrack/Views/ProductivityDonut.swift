@@ -19,6 +19,32 @@ struct ProductivityDonut: View {
     @State private var cursorActive = false
     @State private var selected: Int? = nil          // tapped slice → its breakdown
     @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var blocks: BlockController
+
+    private func tag(for entry: UsageEntry) -> ProductivityTag? {
+        switch entry.kind {
+        case .app(let b): return store.appTag(b)
+        case .site(let d): return store.siteTag(d)
+        }
+    }
+    private func setTag(_ entry: UsageEntry, _ t: ProductivityTag?) {
+        switch entry.kind {
+        case .app(let b): store.setAppTag(b, t)
+        case .site(let d): store.setSiteTag(d, t)
+        }
+    }
+    private func startBlock(_ entry: UsageEntry, _ minutes: Int) {
+        switch entry.kind {
+        case .app(let b): blocks.block(kind: "app", value: b, minutes: minutes)
+        case .site(let d): blocks.block(kind: "site", value: d, minutes: minutes)
+        }
+    }
+    private func dontTrack(_ entry: UsageEntry) {
+        switch entry.kind {
+        case .app(let b): store.excludeApp(b)
+        case .site(let d): store.excludeSite(d)
+        }
+    }
 
     private var total: Double { productive + unproductive + other }
 
@@ -315,7 +341,14 @@ struct ProductivityDonut: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 18)
             } else {
                 VStack(spacing: 2) {
-                    ForEach(items.prefix(7)) { BreakdownRow(entry: $0, color: r.color, categoryTotal: r.value) }
+                    ForEach(items.prefix(7)) { item in
+                        BreakdownRow(entry: item, color: r.color, categoryTotal: r.value,
+                                     currentTag: tag(for: item),
+                                     onTag: { setTag(item, $0) },
+                                     onBlock: { startBlock(item, $0) },
+                                     onExclude: { dontTrack(item) })
+                            .equatable()
+                    }
                     if items.count > 7 {
                         Text("+\(items.count - 7) more")
                             .font(.rowMeta).foregroundStyle(Theme.Ink.faint)
@@ -359,37 +392,27 @@ struct ProductivityDonut: View {
 
 /// One row in a productivity breakdown: icon · name · time, with a share wash in
 /// the category color and a subtle full-row highlight on hover.
-private struct BreakdownRow: View {
+private struct BreakdownRow: View, Equatable {
     let entry: UsageEntry
     let color: Color
     let categoryTotal: Double
+    var currentTag: ProductivityTag? = nil
+    var onTag: (ProductivityTag?) -> Void = { _ in }
+    var onBlock: (Int) -> Void = { _ in }
+    var onExclude: () -> Void = {}
     @State private var hovering = false
-    @EnvironmentObject private var store: UsageStore
-    @EnvironmentObject private var blocks: BlockController
 
-    private var currentTag: ProductivityTag? {
-        switch entry.kind {
-        case .app(let b): return store.appTag(b)
-        case .site(let d): return store.siteTag(d)
-        }
-    }
-    private func setTag(_ tag: ProductivityTag?) {
-        switch entry.kind {
-        case .app(let b): store.setAppTag(b, tag)
-        case .site(let d): store.setSiteTag(d, tag)
-        }
-    }
-    private func startBlock(_ minutes: Int) {
-        switch entry.kind {
-        case .app(let b): blocks.block(kind: "app", value: b, minutes: minutes)
-        case .site(let d): blocks.block(kind: "site", value: d, minutes: minutes)
-        }
-    }
-    private func dontTrack() {
-        switch entry.kind {
-        case .app(let b): store.excludeApp(b)
-        case .site(let d): store.excludeSite(d)
-        }
+    // Equatable at minute/percent resolution: the once-a-second header tick must not
+    // re-render these rows, or an open context submenu flickers shut. (The row takes
+    // its tag + actions as plain values — no @EnvironmentObject — so this holds.)
+    static func == (l: BreakdownRow, r: BreakdownRow) -> Bool {
+        l.entry.id == r.entry.id &&
+        l.entry.title == r.entry.title &&
+        Format.duration(l.entry.seconds) == Format.duration(r.entry.seconds) &&
+        l.percent == r.percent &&
+        Int((l.entry.fraction * 100).rounded()) == Int((r.entry.fraction * 100).rounded()) &&
+        l.color == r.color &&
+        l.currentTag == r.currentTag
     }
 
     /// Share of its own category (e.g. 30m of 60m productive → 50%). Any real time
@@ -429,27 +452,27 @@ private struct BreakdownRow: View {
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
         .contextMenu {
             Menu {
-                Button("15 minutes") { startBlock(15) }
-                Button("30 minutes") { startBlock(30) }
-                Button("1 hour") { startBlock(60) }
-                Button("2 hours") { startBlock(120) }
+                Button("15 minutes") { onBlock(15) }
+                Button("30 minutes") { onBlock(30) }
+                Button("1 hour") { onBlock(60) }
+                Button("2 hours") { onBlock(120) }
             } label: {
                 Label("Block…", systemImage: "hand.raised")
             }
             Menu {
-                Button { setTag(.productive) } label: {
+                Button { onTag(.productive) } label: {
                     Label("Productive", systemImage: currentTag == .productive ? "checkmark" : "leaf")
                 }
-                Button { setTag(.unproductive) } label: {
+                Button { onTag(.unproductive) } label: {
                     Label("Unproductive", systemImage: currentTag == .unproductive ? "checkmark" : "minus.circle")
                 }
-                Button { setTag(nil) } label: {
+                Button { onTag(nil) } label: {
                     Label("Clear", systemImage: currentTag == nil ? "checkmark" : "circle")
                 }
             } label: {
                 Label("Productivity", systemImage: "chart.pie")
             }
-            Button("Don't track", systemImage: "eye.slash", role: .destructive) { dontTrack() }
+            Button("Don't track", systemImage: "eye.slash", role: .destructive) { onExclude() }
         }
     }
 
