@@ -364,6 +364,33 @@ private struct BreakdownRow: View {
     let color: Color
     let categoryTotal: Double
     @State private var hovering = false
+    @EnvironmentObject private var store: UsageStore
+    @EnvironmentObject private var blocks: BlockController
+
+    private var currentTag: ProductivityTag? {
+        switch entry.kind {
+        case .app(let b): return store.appTag(b)
+        case .site(let d): return store.siteTag(d)
+        }
+    }
+    private func setTag(_ tag: ProductivityTag?) {
+        switch entry.kind {
+        case .app(let b): store.setAppTag(b, tag)
+        case .site(let d): store.setSiteTag(d, tag)
+        }
+    }
+    private func startBlock(_ minutes: Int) {
+        switch entry.kind {
+        case .app(let b): blocks.block(kind: "app", value: b, minutes: minutes)
+        case .site(let d): blocks.block(kind: "site", value: d, minutes: minutes)
+        }
+    }
+    private func dontTrack() {
+        switch entry.kind {
+        case .app(let b): store.excludeApp(b)
+        case .site(let d): store.excludeSite(d)
+        }
+    }
 
     /// Share of its own category (e.g. 30m of 60m productive → 50%). Any real time
     /// shows at least 1%, so a tiny entry never reads "0%".
@@ -400,6 +427,30 @@ private struct BreakdownRow: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.row, style: .continuous))
         .onHover { h in withAnimation(.easeOut(duration: 0.15)) { hovering = h } }
+        .contextMenu {
+            Menu {
+                Button("15 minutes") { startBlock(15) }
+                Button("30 minutes") { startBlock(30) }
+                Button("1 hour") { startBlock(60) }
+                Button("2 hours") { startBlock(120) }
+            } label: {
+                Label("Block…", systemImage: "hand.raised")
+            }
+            Menu {
+                Button { setTag(.productive) } label: {
+                    Label("Productive", systemImage: currentTag == .productive ? "checkmark" : "leaf")
+                }
+                Button { setTag(.unproductive) } label: {
+                    Label("Unproductive", systemImage: currentTag == .unproductive ? "checkmark" : "minus.circle")
+                }
+                Button { setTag(nil) } label: {
+                    Label("Clear", systemImage: currentTag == nil ? "checkmark" : "circle")
+                }
+            } label: {
+                Label("Productivity", systemImage: "chart.pie")
+            }
+            Button("Don't track", systemImage: "eye.slash", role: .destructive) { dontTrack() }
+        }
     }
 
     @ViewBuilder private var icon: some View {
