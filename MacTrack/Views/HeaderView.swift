@@ -18,27 +18,17 @@ struct HeaderView: View {
 
     private var isToday: Bool { viewDay == DayKey.today }
 
-    /// The thing currently in focus — a website if you're on one, otherwise the
-    /// app. The big readout reflects *this*, not the whole-day total.
-    private var focusLabel: String {
-        if let domain = monitor.currentDomain { return SiteKey.display(domain) }
-        if let name = monitor.currentAppName { return name }
-        return "Today"
-    }
-
-    private var focusSeconds: Double {
-        store.focusSeconds(domain: monitor.currentDomain, bundleID: monitor.currentBundleID)
-    }
-
-    /// A past day's total tracked time (its three productivity buckets summed).
+    /// The day's total time on the computer — its three productivity buckets summed,
+    /// which equals all active (non-idle) time tracked that day. This is the big
+    /// readout: total time on the Mac, not whatever app you're in right now.
     private var dayTotalSeconds: Double {
         let s = store.productivitySplit(for: viewDay)
         return s.productive + s.unproductive + s.other
     }
 
-    /// What the big number shows: an open detail's total, else live focus today, or
-    /// the day's total in the past.
-    private var readoutSeconds: Double { overrideSeconds ?? (isToday ? focusSeconds : dayTotalSeconds) }
+    /// What the big number shows: an open detail's total, else the day's total time
+    /// on the computer (today or past).
+    private var readoutSeconds: Double { overrideSeconds ?? dayTotalSeconds }
     private var dimmed: Bool { isToday && (monitor.isPaused || monitor.isSleeping) }
 
     private var headerLabel: String {
@@ -46,7 +36,7 @@ struct HeaderView: View {
         if !isToday { return Self.dateLabel(viewDay) }
         if monitor.isSleeping { return "Asleep until \(hourLabel(wakeHour))" }
         if monitor.isPaused { return "Paused" }
-        return focusLabel
+        return "Today"
     }
 
     private func hourLabel(_ hour: Int) -> String {
