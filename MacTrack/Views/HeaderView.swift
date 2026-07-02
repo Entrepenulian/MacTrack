@@ -18,17 +18,35 @@ struct HeaderView: View {
 
     private var isToday: Bool { viewDay == DayKey.today }
 
+    /// The thing currently in focus — a website if you're on one, else the app.
+    /// The home list's big readout reflects *this*.
+    private var focusLabel: String {
+        if let domain = monitor.currentDomain { return SiteKey.display(domain) }
+        if let name = monitor.currentAppName { return name }
+        return "Today"
+    }
+    private var focusSeconds: Double {
+        store.focusSeconds(domain: monitor.currentDomain, bundleID: monitor.currentBundleID)
+    }
+
     /// The day's total time on the computer — its three productivity buckets summed,
-    /// which equals all active (non-idle) time tracked that day. This is the big
-    /// readout: total time on the Mac, not whatever app you're in right now.
+    /// which equals all active (non-idle) time tracked that day. Shown on the
+    /// summary pages (donut, leaderboard) and for a past day.
     private var dayTotalSeconds: Double {
         let s = store.productivitySplit(for: viewDay)
         return s.productive + s.unproductive + s.other
     }
 
-    /// What the big number shows: an open detail's total, else the day's total time
-    /// on the computer (today or past).
-    private var readoutSeconds: Double { overrideSeconds ?? dayTotalSeconds }
+    /// The donut and leaderboard are day summaries; the home list is "right now".
+    private var summaryPage: Bool { showOverview || showLeaderboard }
+
+    /// What the big number shows: an open detail's total; on a summary page (or a
+    /// past day) the day's total computer time; on the home list today, live focus.
+    private var readoutSeconds: Double {
+        if let overrideSeconds { return overrideSeconds }
+        if summaryPage || !isToday { return dayTotalSeconds }
+        return focusSeconds
+    }
     private var dimmed: Bool { isToday && (monitor.isPaused || monitor.isSleeping) }
 
     private var headerLabel: String {
@@ -36,7 +54,7 @@ struct HeaderView: View {
         if !isToday { return Self.dateLabel(viewDay) }
         if monitor.isSleeping { return "Asleep until \(hourLabel(wakeHour))" }
         if monitor.isPaused { return "Paused" }
-        return "Today"
+        return summaryPage ? "Today" : focusLabel
     }
 
     private func hourLabel(_ hour: Int) -> String {
