@@ -217,6 +217,23 @@ final class UsageStore: ObservableObject {
         return result
     }
 
+    /// Your best days, ranked by the *least* time spent on unproductive apps and
+    /// sites. Only days you actually used count — a day's total tracked time must
+    /// clear `minTotal`, so an unused (near-empty) day can't sneak to the top with
+    /// a hollow zero. Returns the unproductive seconds per day, ascending, capped at
+    /// `limit`. Powers the leaderboard.
+    func lowestUnproductiveDays(limit: Int = 3, minTotal: Double = 1800) -> [Double] {
+        days.keys
+            .compactMap { key -> Double? in
+                let s = productivitySplit(for: key)
+                let total = s.productive + s.unproductive + s.other
+                return total >= minTotal ? s.unproductive : nil
+            }
+            .sorted()
+            .prefix(limit)
+            .map { $0 }
+    }
+
     /// The apps/sites that make up one productivity bucket — `tag == nil` means
     /// Other (untagged) — sorted by time, with a within-bucket fraction for the row
     /// wash. Browsers are skipped (their time is represented by their sites).
