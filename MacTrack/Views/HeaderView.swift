@@ -5,6 +5,7 @@ struct HeaderView: View {
     @EnvironmentObject var monitor: ActivityMonitor
     @Binding var showSettings: Bool
     @Binding var showOverview: Bool
+    @Binding var showLeaderboard: Bool
     /// The day the popover is showing. Today → live focus; a past day → that day's
     /// date and total tracked time, with a "Today" button to return.
     var viewDay: String = DayKey.today
@@ -83,11 +84,19 @@ struct HeaderView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
 
+                GlassIconButton(systemName: showLeaderboard ? "trophy.fill" : "trophy",
+                                size: 26,
+                                help: showLeaderboard ? "Show details" : "Best days") {
+                    onReturnToToday()
+                    if !showLeaderboard { showOverview = false }
+                    showLeaderboard.toggle()
+                }
                 GlassIconButton(systemName: showOverview ? "chart.pie.fill" : "chart.pie",
                                 size: 26,
                                 help: showOverview ? "Show details" : "Show productivity") {
                     // Toggling the view is "going home" — always snap back to today.
                     onReturnToToday()
+                    if !showOverview { showLeaderboard = false }
                     showOverview.toggle()
                 }
                 if isToday {

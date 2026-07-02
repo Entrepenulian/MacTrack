@@ -28,6 +28,7 @@ struct MenuRootView: View {
     /// Resolved brand colors per entry, so chart lines match the detail bar chart.
     @State private var entryColors: [String: Color] = [:]
     @AppStorage("showOverview") private var showOverview = false
+    @AppStorage("showLeaderboard") private var showLeaderboard = false
     @AppStorage("idleThreshold") private var idleThreshold: Double = 120
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
     @AppStorage("chartEndHour") private var chartEndHour: Int = 22
@@ -71,18 +72,23 @@ struct MenuRootView: View {
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             HeaderView(showSettings: $showSettings, showOverview: $showOverview,
+                       showLeaderboard: $showLeaderboard,
                        viewDay: viewDay, onReturnToToday: returnToToday,
                        overrideLabel: selectedEntry != nil ? detailLabel : nil,
                        overrideSeconds: selectedEntry != nil ? detailSeconds : nil)
 
             // Active-block countdowns belong to "right now" on the details view —
-            // hide them on the productivity overview and when looking back at a
-            // past day.
-            if !showOverview && isViewingToday && !blocks.activeBlocks.isEmpty {
+            // hide them on the productivity overview, the leaderboard, and when
+            // looking back at a past day.
+            if !showOverview && !showLeaderboard && isViewingToday && !blocks.activeBlocks.isEmpty {
                 blockBanner
             }
 
-            if showOverview {
+            if showLeaderboard {
+                LeaderboardView()
+                    .padding(.top, 16)
+                    .transition(.opacity)
+            } else if showOverview {
                 let split = store.productivitySplit(for: viewDay)
                 ProductivityDonut(productive: split.productive,
                                   unproductive: split.unproductive,
@@ -99,9 +105,11 @@ struct MenuRootView: View {
             }
         }
         .animation(.calm, value: showOverview)
+        .animation(.calm, value: showLeaderboard)
         // A selected row's detail is contextual — drop it when the scope, day, or
         // overview toggle changes so you never land on a stale detail.
         .onChange(of: showOverview) { selectedEntry = nil }
+        .onChange(of: showLeaderboard) { selectedEntry = nil }
         .onChange(of: scope) { selectedEntry = nil }
         .onChange(of: viewDay) { selectedEntry = nil }
     }
