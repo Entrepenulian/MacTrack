@@ -29,6 +29,7 @@ struct MenuRootView: View {
     @State private var entryColors: [String: Color] = [:]
     @AppStorage("showOverview") private var showOverview = false
     @AppStorage("showLeaderboard") private var showLeaderboard = false
+    @AppStorage("showProjects") private var showProjects = false
     @AppStorage("idleThreshold") private var idleThreshold: Double = 120
     @AppStorage("chartStartHour") private var chartStartHour: Int = 8
     @AppStorage("chartEndHour") private var chartEndHour: Int = 22
@@ -84,15 +85,15 @@ struct MenuRootView: View {
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             HeaderView(showSettings: $showSettings, showOverview: $showOverview,
-                       showLeaderboard: $showLeaderboard,
+                       showLeaderboard: $showLeaderboard, showProjects: $showProjects,
                        viewDay: viewDay, onReturnToToday: returnToToday,
                        overrideLabel: selectedEntry != nil ? detailLabel : nil,
                        overrideSeconds: selectedEntry != nil ? detailSeconds : nil)
 
             // Active-block countdowns belong to "right now" on the details view —
-            // hide them on the productivity overview, the leaderboard, and when
-            // looking back at a past day.
-            if !showOverview && !showLeaderboard && isViewingToday && !blocks.activeBlocks.isEmpty {
+            // hide them on the productivity overview, the leaderboard, the projects
+            // page, and when looking back at a past day.
+            if !showOverview && !showLeaderboard && !showProjects && isViewingToday && !blocks.activeBlocks.isEmpty {
                 blockBanner
             }
 
@@ -111,6 +112,10 @@ struct MenuRootView: View {
                                   onSelectDay: selectDay)
                     .padding(.top, 16)
                     .transition(.opacity)
+            } else if showProjects {
+                ProjectsView()
+                    .padding(.top, 16)
+                    .transition(.opacity)
             } else {
                 detailsBody
                     .transition(.opacity)
@@ -118,10 +123,12 @@ struct MenuRootView: View {
         }
         .animation(.calm, value: showOverview)
         .animation(.calm, value: showLeaderboard)
+        .animation(.calm, value: showProjects)
         // A selected row's detail is contextual — drop it when the scope, day, or
         // overview toggle changes so you never land on a stale detail.
         .onChange(of: showOverview) { selectedEntry = nil }
         .onChange(of: showLeaderboard) { selectedEntry = nil }
+        .onChange(of: showProjects) { selectedEntry = nil }
         .onChange(of: scope) { selectedEntry = nil }
         .onChange(of: viewDay) { selectedEntry = nil }
     }
@@ -167,7 +174,7 @@ struct MenuRootView: View {
                 if entries.isEmpty {
                     EmptyStateView(scope: scope)
                 } else {
-                    UsageListView(entries: entries, onSelect: openEntry)
+                    UsageListView(entries: entries, dayKey: viewDay, onSelect: openEntry)
                 }
             }
             .id("\(scope)-\(viewDay)")

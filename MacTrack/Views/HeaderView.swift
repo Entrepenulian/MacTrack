@@ -6,6 +6,7 @@ struct HeaderView: View {
     @Binding var showSettings: Bool
     @Binding var showOverview: Bool
     @Binding var showLeaderboard: Bool
+    @Binding var showProjects: Bool
     /// The day the popover is showing. Today → live focus; a past day → that day's
     /// date and total tracked time, with a "Today" button to return.
     var viewDay: String = DayKey.today
@@ -33,8 +34,9 @@ struct HeaderView: View {
     /// including uncategorized tab time). Shown on the summary pages and past days.
     private var dayTotalSeconds: Double { store.totalSeconds(for: viewDay) }
 
-    /// The donut and leaderboard are day summaries; the home list is "right now".
-    private var summaryPage: Bool { showOverview || showLeaderboard }
+    /// The donut, leaderboard and projects pages are day summaries; the home list
+    /// is "right now".
+    private var summaryPage: Bool { showOverview || showLeaderboard || showProjects }
 
     /// What the big number shows: an open detail's total; on a summary page (or a
     /// past day) the day's total computer time; on the home list today, live focus.
@@ -92,7 +94,7 @@ struct HeaderView: View {
                                 size: 26,
                                 help: showLeaderboard ? "Show details" : "Best days") {
                     onReturnToToday()
-                    if !showLeaderboard { showOverview = false }
+                    if !showLeaderboard { showOverview = false; showProjects = false }
                     showLeaderboard.toggle()
                 }
                 GlassIconButton(systemName: showOverview ? "chart.pie.fill" : "chart.pie",
@@ -100,8 +102,16 @@ struct HeaderView: View {
                                 help: showOverview ? "Show details" : "Show productivity") {
                     // Toggling the view is "going home" — always snap back to today.
                     onReturnToToday()
-                    if !showOverview { showLeaderboard = false }
+                    if !showOverview { showLeaderboard = false; showProjects = false }
                     showOverview.toggle()
+                }
+                GlassIconButton(systemName: showProjects ? "tag.fill" : "tag",
+                                size: 26,
+                                help: showProjects ? "Show details" : "Projects") {
+                    onReturnToToday()
+                    showOverview = false
+                    showLeaderboard = false
+                    showProjects.toggle()
                 }
                 if isToday {
                     GlassIconButton(systemName: monitor.isPaused ? "play.fill" : "pause.fill",
@@ -134,8 +144,44 @@ struct HeaderView: View {
             .animation(.smooth(duration: 0.3), value: Int(readoutSeconds))
             .animation(.calm, value: monitor.isPaused)
             .animation(.calm, value: monitor.isSleeping)
+
+            // The active project sits under the readout, not on the label line, so
+            // it never competes with the header label for width.
+            if let p = store.activeProject {
+                Menu {
+                    Button { store.setActiveProject(nil) } label: {
+                        Label("No Project", systemImage: store.activeProjectID == nil ? "checkmark" : "circle")
+                    }
+                    Divider()
+                    ForEach(store.activeProjects) { project in
+                        Button { store.setActiveProject(project.id) } label: {
+                            Label(project.name, systemImage: store.activeProjectID == project.id ? "checkmark" : "circle")
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Circle().fill(p.color).frame(width: 6, height: 6)
+                        Text(p.name)
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.Ink.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Theme.fill(1), in: Capsule(style: .continuous))
+                    .overlay(Capsule(style: .continuous).strokeBorder(Theme.hairline, lineWidth: 0.5))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .transition(.opacity)
+            }
         }
         .animation(.timingCurve(0.22, 1, 0.36, 1, duration: 0.4), value: isToday)
+        .animation(.calm, value: store.activeProjectID)
     }
 
     // MARK: Date label
