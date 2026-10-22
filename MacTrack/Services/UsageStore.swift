@@ -18,6 +18,13 @@ final class UsageStore: ObservableObject {
     @Published private(set) var appTags: [String: ProductivityTag] = [:]
     @Published private(set) var siteTags: [String: ProductivityTag] = [:]
 
+    /// Projects ("tags" for what you're working on). Time is credited at sampling
+    /// time, so changing a project never relabels past days.
+    @Published private(set) var projects: [Project] = []
+    @Published private(set) var activeProjectID: String?
+    @Published private(set) var projectDefaults: [String: String] = [:]        // "kind:value" → projectID
+    @Published private(set) var projectDays: [String: [String: Double]] = [:]  // day → projectID → seconds
+
     /// Today's per-minute samples, keyed "kind:key" → (minute → seconds). Drives
     /// the line chart. Persisted via the database; cached here for fast reads.
     private(set) var todaySamples: [String: [Int: Double]] = [:]
@@ -47,6 +54,14 @@ final class UsageStore: ObservableObject {
                 guard let cat = ProductivityTag(rawValue: t.category) else { continue }
                 if t.kind == "app" { appTags[t.value] = cat }
                 else if t.kind == "site" { siteTags[t.value] = cat }
+            }
+            projects = database.loadProjects()
+            projectDefaults = database.loadProjectDefaults()
+            projectDays = database.loadProjectUsage()
+            // Restore the last active project — unless it was archived meanwhile.
+            if let saved = UserDefaults.standard.string(forKey: "project.activeID"),
+               projects.contains(where: { $0.id == saved && !$0.archived }) {
+                activeProjectID = saved
             }
         }
     }
@@ -197,6 +212,199 @@ final class UsageStore: ObservableObject {
         }
         revision &+= 1
     }
+
+    // MARK: Projects
+
+    var activeProjects: [Project] {
+        projects.filter { !$0.archived }
+            .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+    }
+
+    var activeProject: Project? {
+        guard let id = activeProjectID else { return nil }
+        return projects.first { $0.id == id && !$0.archived }
+    }
+
+    func setActiveProject(_ id: String?) {
+        if let id {
+            guard projects.contains(where: { $0.id == id && !$0.archived }) else { return }
+            activeProjectID = id
+            UserDefaults.standard.set(id, forKey: "project.activeID")
+        } else {
+            activeProjectID = nil
+            UserDefaults.standard.removeObject(forKey: "project.activeID")
+        }
+        revision &+= 1
+    }
+
+    @discardableResult
+    func createProject(name: String, colorHex: String) -> Project? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let p = Project(id: UUID().uuidString, name: trimmed, colorHex: colorHex, archived: false,
+                        sortOrder: (projects.map(\.sortOrder).max() ?? 0) + 1)
+        projects.append(p)
+        db?.upsertProject(p)
+        revision &+= 1
+        return p
+    }
+
+    func renameProject(id: String, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let i = projects.firstIndex(where: { $0.id == id }) else { return }
+        projects[i].name = trimmed
+        db?.upsertProject(projects[i])
+        revision &+= 1
+    }
+
+    func setProjectColor(id: String, colorHex: String) {
+        guard let i = projects.firstIndex(where: { $0.id == id }) else { return }
+        projects[i].colorHex = colorHex
+        db?.upsertProject(projects[i])
+        revision &+= 1
+    }
+
+    func setProjectArchived(id: String, archived: Bool) {
+        guard let i = projects.firstIndex(where: { $0.id == id }) else { return }
+        projects[i].archived = archived
+        db?.upsertProject(projects[i])
+        if archived && activeProjectID == id { setActiveProject(nil) }
+        revision &+= 1
+    }
+
+    /// "kind:value" for an entry — the projectDefault key / credit focus key.
+    private func projectFocus(for entry: UsageEntry) -> (kind: String, value: String) {
+        switch entry.kind {
+        case .app(let b): return ("app", b)
+        case .site(let d): return ("site", d)
+        }
+    }
+
+    func projectBadge(for entry: UsageEntry) -> ProjectBadge? {
+        let focus = projectFocus(for: entry)
+        guard let pid = projectDefaults[ProjectKey.key(kind: focus.kind, value: focus.value)],
+              let p = projects.first(where: { $0.id == pid }), !p.archived else { return nil }
+        return p.badge
+    }
+
+    func hasProjectDefault(for entry: UsageEntry) -> Bool {
+        let focus = projectFocus(for: entry)
+        return projectDefaults[ProjectKey.key(kind: focus.kind, value: focus.value)] != nil
+    }
+
+    /// Toggle the remembered association for this item. With no active project and
+    /// no existing default, this is a no-op.
+    func toggleProjectDefault(for entry: UsageEntry) {
+        let focus = projectFocus(for: entry)
+        let key = ProjectKey.key(kind: focus.kind, value: focus.value)
+        if projectDefaults[key] != nil {
+            projectDefaults.removeValue(forKey: key)
+            db?.clearProjectDefault(kind: focus.kind, value: focus.value)
+        } else if let id = activeProjectID {
+            projectDefaults[key] = id
+            db?.setProjectDefault(kind: focus.kind, value: focus.value, projectID: id)
+        }
+        revision &+= 1
+    }
+
+    func clearProjectDefault(forKey key: String) {
+        guard projectDefaults[key] != nil else { return }
+        projectDefaults.removeValue(forKey: key)
+        let parts = key.split(separator: ":", maxSplits: 1).map(String.init)
+        if parts.count == 2 { db?.clearProjectDefault(kind: parts[0], value: parts[1]) }
+        revision &+= 1
+    }
+
+    /// Auto-switch: called once per focus change by the sampler. Items without a
+    /// rule leave the active project untouched.
+    func projectFocusChanged(kind: String, value: String) {
+        guard let id = projectDefaults[ProjectKey.key(kind: kind, value: value)],
+              projects.contains(where: { $0.id == id && !$0.archived }) else { return }
+        if activeProjectID != id { setActiveProject(id) }
+    }
+
+    /// Credit one sampler tick to the active project. Only called when the tick had
+    /// a countable focus (a credited site, or a non-browser app).
+    func creditProject(_ seconds: Double, kind: String, value: String) {
+        guard seconds > 0, let id = activeProjectID,
+              projects.contains(where: { $0.id == id && !$0.archived }) else { return }
+        let day = DayKey.today
+        var dayMap = projectDays[day] ?? [:]
+        dayMap[id, default: 0] += seconds
+        projectDays[day] = dayMap
+        db?.addProjectTime(day: day, projectID: id, addSeconds: seconds)
+        db?.addProjectItemTime(day: day, projectID: id, kind: kind, value: value, addSeconds: seconds)
+    }
+
+    func projectSeconds(_ id: String, days: [String]) -> Double {
+        days.reduce(0) { $0 + (projectDays[$1]?[id] ?? 0) }
+    }
+
+    /// Active projects with time in `days`, sorted by seconds desc.
+    func projectTotals(days: [String]) -> [(project: Project, seconds: Double)] {
+        activeProjects
+            .map { (project: $0, seconds: projectSeconds($0.id, days: days)) }
+            .filter { $0.seconds > 0 }
+            .sorted { $0.seconds > $1.seconds }
+    }
+
+    /// Sum of all projects' time in `days`, archived included, for the unassigned row.
+    func taggedProjectSeconds(days: [String]) -> Double {
+        days.reduce(0) { sum, day in
+            sum + (projectDays[day]?.values.reduce(0, +) ?? 0)
+        }
+    }
+
+    func totalSeconds(days: [String]) -> Double {
+        days.reduce(0) { $0 + totalSeconds(for: $1) }
+    }
+
+    /// Items that received time inside one project over `days`.
+    func projectItems(projectID: String, days: [String]) -> [UsageEntry] {
+        guard let db else { return [] }
+        let allowed = Set(days)
+        var totals: [String: (kind: String, value: String, seconds: Double)] = [:]
+        for row in db.loadProjectItemRows(projectID: projectID) where allowed.contains(row.day) {
+            let key = row.kind + ":" + row.value
+            var t = totals[key] ?? (kind: row.kind, value: row.value, seconds: 0)
+            t.seconds += row.seconds
+            totals[key] = t
+        }
+        let entries: [UsageEntry] = totals.values.map { t in
+            switch t.kind {
+            case "app":
+                return UsageEntry(id: "app:" + t.value, kind: .app(bundleID: t.value),
+                                  title: appDisplayName(t.value), subtitle: nil, seconds: t.seconds,
+                                  category: ActivityCategory.classify(bundleID: t.value), fraction: 0)
+            default:
+                return UsageEntry(id: "site:" + t.value, kind: .site(domain: t.value),
+                                  title: SiteKey.display(t.value), subtitle: nil, seconds: t.seconds,
+                                  category: .web, fraction: 0)
+            }
+        }
+        let maxSeconds = entries.map(\.seconds).max() ?? 1
+        return entries.sorted { $0.seconds > $1.seconds }.map { e in
+            var x = e
+            x.fraction = maxSeconds > 0 ? e.seconds / maxSeconds : 0
+            return x
+        }
+    }
+
+    func appDisplayName(_ bundleID: String) -> String {
+        for day in days.values {
+            if let name = day.apps[bundleID]?.name { return name }
+        }
+        return bundleID
+    }
+
+    /// Human label for a projectDefault key ("app:com.x" / "site:github.com").
+    func projectDefaultLabel(_ key: String) -> String {
+        let parts = key.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return key }
+        return parts[0] == "app" ? appDisplayName(parts[1]) : SiteKey.display(parts[1])
+    }
+
+    // MARK: Productivity statistics
 
     /// Today's focused time split into Productive / Unproductive / Other. Browser
     /// apps are skipped (their per-site time is counted instead, so nothing is

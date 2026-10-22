@@ -129,7 +129,39 @@ final class DatabaseStore {
             try setUserVersion(5)
             version = 5
         }
-        // Future schema changes: `if version < 6 { ...; try setUserVersion(6) }`
+
+        if version < 6 {
+            // Projects: named tags time is credited to, plus the remembered
+            // "this app/site always belongs to this project" rules.
+            try exec("""
+                CREATE TABLE IF NOT EXISTS project(
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    archived INTEGER NOT NULL DEFAULT 0,
+                    sortOrder INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS projectUsage(
+                    day TEXT NOT NULL,
+                    projectID TEXT NOT NULL,
+                    seconds REAL NOT NULL DEFAULT 0,
+                    PRIMARY KEY(day, projectID));
+                CREATE TABLE IF NOT EXISTS projectItemUsage(
+                    day TEXT NOT NULL,
+                    projectID TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    seconds REAL NOT NULL DEFAULT 0,
+                    PRIMARY KEY(day, projectID, kind, value));
+                CREATE TABLE IF NOT EXISTS projectDefault(
+                    kind TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    projectID TEXT NOT NULL,
+                    PRIMARY KEY(kind, value));
+                """)
+            try setUserVersion(6)
+            version = 6
+        }
+        // Future schema changes: `if version < 7 { ...; try setUserVersion(7) }`
         // Existing data is preserved — migrations are additive.
     }
 
@@ -347,6 +379,88 @@ final class DatabaseStore {
     }
     func clearTag(kind: String, value: String) {
         run("DELETE FROM tag WHERE kind = ? AND value = ?", [.text(kind), .text(value)])
+    }
+
+    // MARK: Projects
+
+    func loadProjects() -> [Project] {
+        var rows: [Project] = []
+        query("SELECT id, name, color, archived, sortOrder FROM project ORDER BY sortOrder, name") { stmt in
+            guard let id = textColumn(stmt, 0), let name = textColumn(stmt, 1),
+                  let color = textColumn(stmt, 2) else { return }
+            rows.append(Project(id: id, name: name, colorHex: color,
+                                archived: sqlite3_column_int64(stmt, 3) != 0,
+                                sortOrder: Int(sqlite3_column_int64(stmt, 4))))
+        }
+        return rows
+    }
+
+    func upsertProject(_ p: Project) {
+        run("""
+            INSERT INTO project(id, name, color, archived, sortOrder) VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              name = excluded.name, color = excluded.color,
+              archived = excluded.archived, sortOrder = excluded.sortOrder
+            """, [.text(p.id), .text(p.name), .text(p.colorHex),
+                  .int(p.archived ? 1 : 0), .int(Int64(p.sortOrder))])
+    }
+
+    func loadProjectDefaults() -> [String: String] {
+        var rows: [String: String] = [:]
+        query("SELECT kind, value, projectID FROM projectDefault") { stmt in
+            guard let k = textColumn(stmt, 0), let v = textColumn(stmt, 1),
+                  let p = textColumn(stmt, 2) else { return }
+            rows[ProjectKey.key(kind: k, value: v)] = p
+        }
+        return rows
+    }
+
+    func setProjectDefault(kind: String, value: String, projectID: String) {
+        run("""
+            INSERT INTO projectDefault(kind, value, projectID) VALUES(?, ?, ?)
+            ON CONFLICT(kind, value) DO UPDATE SET projectID = excluded.projectID
+            """, [.text(kind), .text(value), .text(projectID)])
+    }
+
+    func clearProjectDefault(kind: String, value: String) {
+        run("DELETE FROM projectDefault WHERE kind = ? AND value = ?", [.text(kind), .text(value)])
+    }
+
+    func addProjectTime(day: String, projectID: String, addSeconds: Double) {
+        run("""
+            INSERT INTO projectUsage(day, projectID, seconds) VALUES(?, ?, ?)
+            ON CONFLICT(day, projectID) DO UPDATE SET seconds = seconds + excluded.seconds
+            """, [.text(day), .text(projectID), .double(addSeconds)])
+    }
+
+    func addProjectItemTime(day: String, projectID: String, kind: String, value: String, addSeconds: Double) {
+        run("""
+            INSERT INTO projectItemUsage(day, projectID, kind, value, seconds) VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(day, projectID, kind, value) DO UPDATE SET seconds = seconds + excluded.seconds
+            """, [.text(day), .text(projectID), .text(kind), .text(value), .double(addSeconds)])
+    }
+
+    /// day → projectID → seconds, for in-memory period totals.
+    func loadProjectUsage() -> [String: [String: Double]] {
+        var out: [String: [String: Double]] = [:]
+        query("SELECT day, projectID, seconds FROM projectUsage") { stmt in
+            guard let day = textColumn(stmt, 0), let pid = textColumn(stmt, 1) else { return }
+            out[day, default: [:]][pid] = doubleColumn(stmt, 2) ?? 0
+        }
+        return out
+    }
+
+    /// Raw item rows for one project; the store filters them by period in memory.
+    func loadProjectItemRows(projectID: String) -> [(day: String, kind: String, value: String, seconds: Double)] {
+        var rows: [(day: String, kind: String, value: String, seconds: Double)] = []
+        // projectID is an app-generated UUID, so interpolation is safe (same style
+        // as the day keys in `loadSamples`).
+        query("SELECT day, kind, value, seconds FROM projectItemUsage WHERE projectID = '\(projectID)'") { stmt in
+            guard let day = textColumn(stmt, 0), let kind = textColumn(stmt, 1),
+                  let value = textColumn(stmt, 2) else { return }
+            rows.append((day, kind, value, doubleColumn(stmt, 3) ?? 0))
+        }
+        return rows
     }
 
     func importDay(_ record: DayRecord) {
