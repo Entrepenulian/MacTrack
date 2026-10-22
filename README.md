@@ -22,6 +22,7 @@ A free, native macOS menu bar app that tracks which **apps** you use, which **we
 - **Menu bar readout.** Live time for whatever you are on. Open the popover for the full breakdown.
 - **Right-click to ignore.** Right-click any row and choose "Don't track." It disappears and stays gone.
 - **Productivity score.** Tag any app or site productive or unproductive (right-click → **Productivity**) and your day rolls into a Productive / Unproductive / Other donut.
+- **Projects.** Right-click a row → **Project** to say what you're working on; the tag button in the header shows per-project totals for today, this week, or this month, plus the apps and sites inside each one.
 - **Day-by-day history.** A GitHub-style activity grid colors each past day by what dominated it. Click a day to rewind the popover to it.
 - **Best-days leaderboard.** A trophy button ranks the days you spent the **least** time on unproductive things.
 - **Blocking.** Right-click anything and block it for 15 minutes to 2 hours. A live block has no off switch, and an optional system-level filter keeps enforcing it even when MacTrack isn't running.
@@ -40,6 +41,14 @@ A browser is judged only by the **sites** you visit, never as an app. New or emp
   <img src="docs/donut.png" width="300" alt="Productivity overview donut" />
   <img src="docs/productivity.png" width="300" alt="Tagging an app productive or unproductive" />
 </p>
+
+### Projects
+
+A productivity tag says what *kind* of time it was; a project says *what you were working on*. Right-click any app or site → **Project** to make it the active project. The active project shows under the header's big readout and as a colored dot in the menu bar.
+
+Choose **Always use for this app** (or **this site**) in the same menu to remember the association: the next time that app gains focus, the active project switches to its project. Items without a rule leave the active project alone.
+
+The tag button in the header opens the projects page: per-project time for today, this week, or this month, an **Unassigned** row for time with no project, the apps and sites inside each project, the auto-switch rules, and an archived list. Time is credited second by second to whatever project is active, so renaming, archiving, or switching projects never relabels a past day.
 
 ### Your history, day by day
 
@@ -157,12 +166,12 @@ Swift, SwiftUI, and AppKit. SQLite via the system library, no third-party depend
 ```
 MacTrack/
   App/        entry point and lifecycle
-  Models/     usage records, categories, productivity tags, chart data, quote bank
+  Models/     usage records, categories, productivity tags, projects, chart data, quote bank
   Services/   sampler, browser reader, idle detector, blocks, system-extension control,
               store, database, icons, Focus Guard + blur overlay
   Design/     theme tokens, glass, formatters, bundled-font loader
   Resources/  app entitlements, bundled fonts
-  Views/      popover, header, list, chart, productivity donut, settings
+  Views/      popover, header, list, chart, productivity donut, projects, settings
 NetworkFilter/  the system-level content-filter extension (see SETUP_BLOCKING.md)
 ```
 

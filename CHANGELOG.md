@@ -5,6 +5,11 @@ Notable changes to MacTrack. Dates are in the developer's local time.
 ## Unreleased
 
 ### Added
+- **Projects** — tag what you're working on (right-click any app or site →
+  **Project**), optionally remember "always this project" so switching apps switches
+  the active project, and see per-project totals for today / this week / this month
+  on a new projects page (the tag button in the header). Time is credited at sampling
+  time, so changing a project never relabels a past day.
 - **Best-days leaderboard** — a trophy button ranks your completed days by the least
   time spent on unproductive apps/sites (today, still in progress, is never crowned).
 - **Month view** in a row's detail, alongside Day and Week, with a per-day bar chart
