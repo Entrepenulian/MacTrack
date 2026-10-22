@@ -82,10 +82,53 @@ struct MenuBarLabel: View {
     var body: some View {
         let seconds = store.focusSeconds(domain: monitor.currentDomain, bundleID: monitor.currentBundleID)
         HStack(spacing: 4) {
-            Image(systemName: "hourglass")
+            // A status item renders exactly one leading image, so the project's
+            // color dot takes the hourglass's slot while a project is active.
+            // `.original` keeps the color through the menu bar's template pass.
+            if let p = store.activeProject {
+                Image(nsImage: MenuBarDot.image(for: p.color))
+                    .renderingMode(.original)
+            } else {
+                Image(systemName: "hourglass")
+            }
             if seconds >= 1 {
                 Text(Format.duration(seconds)).monospacedDigit()
             }
         }
+    }
+}
+
+/// The status item's leading image: a filled dot in the active project's color.
+/// Rendered once per color and cached, because the label re-evaluates as the
+/// tracked time changes.
+@MainActor
+enum MenuBarDot {
+    private static var cache: [String: NSImage] = [:]
+
+    static func image(for color: Color) -> NSImage {
+        let key = hexKey(color)
+        if let cached = cache[key] { return cached }
+
+        // A 3 pt transparent tail keeps the dot off the time text — the status item
+        // packs its image and title directly together.
+        let renderer = ImageRenderer(
+            content: HStack(spacing: 0) {
+                Circle().fill(color).frame(width: 7, height: 7)
+                Color.clear.frame(width: 3, height: 7)
+            }
+        )
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        let image = renderer.nsImage ?? NSImage(size: NSSize(width: 7, height: 7))
+        image.isTemplate = false      // keep the project color in the menu bar
+        cache[key] = image
+        return image
+    }
+
+    private static func hexKey(_ color: Color) -> String {
+        let ns = NSColor(color).usingColorSpace(.sRGB) ?? .black
+        return String(format: "%02X%02X%02X",
+                      Int((ns.redComponent * 255).rounded()),
+                      Int((ns.greenComponent * 255).rounded()),
+                      Int((ns.blueComponent * 255).rounded()))
     }
 }

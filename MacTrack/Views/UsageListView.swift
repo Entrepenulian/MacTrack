@@ -5,19 +5,42 @@ import SwiftUI
 struct UsageListView: View {
     @EnvironmentObject var store: UsageStore
     @EnvironmentObject var blocks: BlockController
+    @EnvironmentObject var monitor: ActivityMonitor
     let entries: [UsageEntry]
     var maxItems: Int = 10
+    var dayKey: String = DayKey.today
     var onSelect: (UsageEntry) -> Void = { _ in }
 
     @State private var appeared = false
 
     private var visible: [UsageEntry] { Array(entries.prefix(maxItems)) }
 
+    /// The entry in focus right now — only meaningful when the list shows today.
+    private var currentEntryID: String? {
+        guard dayKey == DayKey.today else { return nil }
+        if let d = monitor.currentDomain { return "site:" + d }
+        if let b = monitor.currentBundleID { return "app:" + b }
+        return nil
+    }
+
+    private func projectBadge(_ entry: UsageEntry) -> ProjectBadge? {
+        if let pinned = store.projectBadge(for: entry) { return pinned }
+        // No rule pinned: still show the active project on the live row, so the tag
+        // is visible in the list while you work.
+        return entry.id == currentEntryID ? store.activeProject?.badge : nil
+    }
+
     var body: some View {
         VStack(spacing: 2) {
             ForEach(Array(visible.enumerated()), id: \.element.id) { index, entry in
                 UsageRow(entry: entry,
                          currentTag: currentTag(entry),
+                         project: projectBadge(entry),
+                         projects: store.activeProjects.map(\.badge),
+                         activeProjectID: store.activeProjectID,
+                         hasProjectDefault: store.hasProjectDefault(for: entry),
+                         onSetProject: { store.setActiveProject($0) },
+                         onToggleProjectDefault: { store.toggleProjectDefault(for: entry) },
                          onBlock: { startBlock(entry, $0) },
                          onTag: { applyTag(entry, $0) },
                          onExclude: { dontTrack(entry) },

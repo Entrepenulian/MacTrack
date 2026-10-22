@@ -36,6 +36,9 @@ final class ActivityMonitor: ObservableObject {
     /// guard so a tick never fires more than one account read at a time.
     private var lastXAccount: String?
     private var pendingAccountFetch = false
+    /// Last "kind:value" focus the active project was inferred from, so the
+    /// remembered-project switch runs once per focus change, not every tick.
+    private var lastProjectFocus: String?
     /// Seconds the front tab has shown a *blocked* X account. After `accountBlockGrace`
     /// we try to auto-switch to an allowed account; if still stuck `accountSwitchWait`
     /// seconds later (no allowed account, or the switch didn't take), we bounce.
@@ -258,6 +261,25 @@ final class ActivityMonitor: ObservableObject {
         } else {
             currentDomain = nil
             lastXAccount = nil
+        }
+
+        // Attribute this tick to the active project, and switch projects when the
+        // focused item has a remembered association. Browser chrome with no credited
+        // site is deliberately not attributed to a project.
+        let projectFocus: (kind: String, value: String)? =
+            currentDomain.map { (kind: "site", value: $0) }
+            ?? (BrowserURLReader.isBrowser(bundleID) ? nil : (kind: "app", value: bundleID))
+        if let focus = projectFocus {
+            let key = focus.kind + ":" + focus.value
+            if key != lastProjectFocus {
+                lastProjectFocus = key
+                // Runs before the credit below, so the first tick on a newly focused
+                // app lands in that app's remembered project.
+                store.projectFocusChanged(kind: focus.kind, value: focus.value)
+            }
+            store.creditProject(delta, kind: focus.kind, value: focus.value)
+        } else {
+            lastProjectFocus = nil
         }
 
         // Feed the focus guard the tag of whatever's in focus (the site if we're

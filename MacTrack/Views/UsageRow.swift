@@ -10,6 +10,12 @@ import SwiftUI
 struct UsageRow: View, Equatable {
     let entry: UsageEntry
     var currentTag: ProductivityTag? = nil
+    var project: ProjectBadge? = nil
+    var projects: [ProjectBadge] = []
+    var activeProjectID: String? = nil
+    var hasProjectDefault: Bool = false
+    var onSetProject: (String?) -> Void = { _ in }
+    var onToggleProjectDefault: () -> Void = {}
     var onBlock: (Int) -> Void = { _ in }
     var onTag: (ProductivityTag?) -> Void = { _ in }
     var onExclude: () -> Void = {}
@@ -24,13 +30,22 @@ struct UsageRow: View, Equatable {
         return false
     }
 
+    private var isSiteRow: Bool {
+        if case .site = entry.kind { return true }
+        return false
+    }
+
     static func == (lhs: UsageRow, rhs: UsageRow) -> Bool {
         lhs.entry.id == rhs.entry.id &&
         lhs.entry.title == rhs.entry.title &&
         lhs.entry.subtitle == rhs.entry.subtitle &&
         Format.duration(lhs.entry.seconds) == Format.duration(rhs.entry.seconds) &&
         Int((lhs.entry.fraction * 100).rounded()) == Int((rhs.entry.fraction * 100).rounded()) &&
-        lhs.currentTag == rhs.currentTag
+        lhs.currentTag == rhs.currentTag &&
+        lhs.project == rhs.project &&
+        lhs.activeProjectID == rhs.activeProjectID &&
+        lhs.hasProjectDefault == rhs.hasProjectDefault &&
+        lhs.projects == rhs.projects
     }
 
     var body: some View {
@@ -43,12 +58,26 @@ struct UsageRow: View, Equatable {
                     .foregroundStyle(Theme.Ink.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                if let subtitle = entry.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.rowMeta)
-                        .foregroundStyle(Theme.Ink.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                if project != nil || entry.subtitle?.isEmpty == false {
+                    HStack(spacing: 4) {
+                        if let p = project {
+                            Circle().fill(p.color).frame(width: 6, height: 6)
+                            Text(p.name)
+                                .font(.rowMeta.weight(.semibold))
+                                .foregroundStyle(p.color)
+                                .lineLimit(1)
+                            if let subtitle = entry.subtitle, !subtitle.isEmpty {
+                                Text("·").foregroundStyle(Theme.Ink.faint)
+                            }
+                        }
+                        if let subtitle = entry.subtitle, !subtitle.isEmpty {
+                            Text(subtitle)
+                                .font(.rowMeta)
+                                .foregroundStyle(Theme.Ink.tertiary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
                 }
             }
 
@@ -62,7 +91,7 @@ struct UsageRow: View, Equatable {
                 .animation(.calm, value: entry.seconds)
         }
         .padding(.horizontal, 10)
-        .frame(height: entry.subtitle?.isEmpty == false ? 42 : 36)
+        .frame(height: (entry.subtitle?.isEmpty == false || project != nil) ? 42 : 36)
         .background(alignment: .leading) {
             ZStack(alignment: .leading) {
                 // Quiet bar-chart wash: width encodes this row's share of the day.
@@ -105,6 +134,25 @@ struct UsageRow: View, Equatable {
                 } label: {
                     Label("Productivity", systemImage: "chart.pie")
                 }
+            }
+            Menu {
+                Button { onSetProject(nil) } label: {
+                    Label("No Project", systemImage: activeProjectID == nil ? "checkmark" : "circle")
+                }
+                Divider()
+                ForEach(projects) { p in
+                    Button { onSetProject(p.id) } label: {
+                        Label(p.name, systemImage: activeProjectID == p.id ? "checkmark" : "circle")
+                    }
+                }
+                Divider()
+                Button { onToggleProjectDefault() } label: {
+                    Label(isSiteRow ? "Always use for this site" : "Always use for this app",
+                          systemImage: hasProjectDefault ? "checkmark" : "pin")
+                }
+                .disabled(activeProjectID == nil && !hasProjectDefault)
+            } label: {
+                Label("Project", systemImage: "tag")
             }
             Button("Don't track", systemImage: "eye.slash", role: .destructive) { onExclude() }
         }
